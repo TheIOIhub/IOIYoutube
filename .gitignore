@@ -1,1 +1,17 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+keystore.properties
+*.jks
+*.keystore
+
+# Local scaffolding helper (not part of the project)
 .agent-env.sh
