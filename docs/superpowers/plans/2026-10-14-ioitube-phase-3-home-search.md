@@ -1205,7 +1205,7 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
 
 private fun NavHostController.navigateTopLevel(route: String) {
     navigate(route) {
-        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+        popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true
         restoreState = true
     }
