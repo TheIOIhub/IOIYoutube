@@ -2,28 +2,34 @@ package com.ioi.youtube.data.extractor
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.downloader.Downloader
+import org.schabi.newpipe.extractor.downloader.Request
+import org.schabi.newpipe.extractor.downloader.Response
 
 class ExtractorInitializerTest {
 
     @Test
-    fun `init is accepted by NewPipe`() {
-        val initializer = ExtractorInitializer(TestDownloader())
+    fun `init registers downloader with NewPipe exactly once and performs no requests`() {
+        val downloader = TestDownloader()
+        val initializer = ExtractorInitializer(downloader)
 
         initializer.init()
+        initializer.init() // second call must be a no-op
 
-        // Якщо NewPipe прийняв downloader, сервіс YouTube реєструється.
-        initializer.init() // другий виклик — no-op, не повинен падати
-        assertThat(true).isTrue()
+        assertThat(NewPipe.getDownloader()).isSameInstanceAs(downloader)
+        assertThat(NewPipe.getService(ServiceList.YouTube.serviceId)).isNotNull()
+        assertThat(downloader.executeCalls).isEqualTo(0)
     }
 
-    private class TestDownloader : org.schabi.newpipe.extractor.downloader.Downloader() {
-        override fun execute(request: org.schabi.newpipe.extractor.downloader.Request): org.schabi.newpipe.extractor.downloader.Response =
-            org.schabi.newpipe.extractor.downloader.Response(
-                200,
-                "OK",
-                emptyMap(),
-                "{}",
-                request.url(),
-            )
+    private class TestDownloader : Downloader() {
+        var executeCalls = 0
+            private set
+
+        override fun execute(request: Request): Response {
+            executeCalls++
+            return Response(200, "OK", emptyMap(), "{}", request.url())
+        }
     }
 }
