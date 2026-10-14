@@ -40,6 +40,7 @@ class CachedVideoDaoTest {
             listOf(
                 videoEntity("bbb", "home", now),
                 videoEntity("aaa", "home", now),
+                videoEntity("ccc", "search:q", now),
             ),
         )
 
@@ -64,12 +65,14 @@ class CachedVideoDaoTest {
             listOf(
                 videoEntity("stale", "home", 100L),
                 videoEntity("fresh", "home", 500L),
+                videoEntity("staleSearch", "search:q", 100L),
             ),
         )
 
         dao.deleteOlderThan(300L)
 
         assertThat(dao.getBySource("home").map { it.id }).containsExactly("fresh")
+        assertThat(dao.getBySource("search:q")).isEmpty()
     }
 
     @Test
