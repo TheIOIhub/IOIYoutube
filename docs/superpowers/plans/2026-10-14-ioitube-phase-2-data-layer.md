@@ -15,8 +15,8 @@
 - `Downloader` — абстрактний клас; реалізуємо `execute(request: Request)`.
 - `Request`: `url()`, `httpMethod()`, `headers(): Map<String, List<String>>`, `dataToSend(): ByteArray?`.
 - `Response(responseCode: Int, responseMessage: String, responseHeaders: Map<String, List<String>>, responseBody: String, latestUrl: String)`.
-- Ліва стрічка: `NewPipe.getService(ServiceList.YouTube).kioskList.getDefaultKioskExtractor().getInitialPage().items`.
-- Пошук: `NewPipe.getService(ServiceList.YouTube).getSearchExtractor(query).getInitialPage().items`.
+- Ліва стрічка: `NewPipe.getService(ServiceList.YouTube.serviceId).kioskList.getDefaultKioskExtractor().getInitialPage().items`.
+- Пошук: `NewPipe.getService(ServiceList.YouTube.serviceId).getSearchExtractor(query).getInitialPage().items`.
 - Деталі/потік: `StreamInfo.getInfo(watchUrl)` → `getName()`, `getUploaderName()`, `getUploaderAvatars()`, `getDescription()` (nullable `Description` → `.getContent()`), `getViewCount()` (**-1** = немає), `getLikeCount()` (**-1**), `getTextualUploadDate()`, `getThumbnails()`, `getDuration()` (**-1**), `getRelatedItems()`, `getVideoStreams()`.
 - Комментарі: `CommentsInfo.getInfo(watchUrl)` — **може повернути null**; `isCommentsDisabled()`.
 - `CommentsInfoItem`: `getCommentId()`, `getCommentText()` (`Description`), `getUploaderName()`, `getUploaderAvatars()`, `getTextualUploadDate()`, `getLikeCount()` (**int**, -1 = немає), `isHeartedByUploader()`, `isPinned()`.
@@ -600,7 +600,7 @@ import javax.inject.Singleton
 class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
 
     private val youtube: StreamingService
-        get() = NewPipe.getService(ServiceList.YouTube)
+        get() = NewPipe.getService(ServiceList.YouTube.serviceId)
 
     override suspend fun fetchHomeFeed(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
         youtube.kioskList
