@@ -1243,7 +1243,7 @@ class GetHomeFeedUseCaseTest {
 
         useCase().test {
             assertThat(awaitItem()).isEqualTo(UiState.Success(videos))
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 
@@ -1251,14 +1251,14 @@ class GetHomeFeedUseCaseTest {
     fun `forwards loading state from repository`() = runTest {
         useCase().test {
             assertThat(awaitItem()).isEqualTo(UiState.Loading)
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 
     @Test
-    fun `delegates to repository exactly once per invocation`() {
+    fun `delegates to repository exactly once per invocation`() = runTest {
         val mockedRepository = mockk<VideoRepository> {
-            every { getHomeFeed() } returns flowOf(listOf(TestData.video()))
+            every { getHomeFeed() } returns flowOf(UiState.Success(listOf(TestData.video())))
         }
 
         GetHomeFeedUseCase(mockedRepository)().first()
@@ -1346,7 +1346,7 @@ class SearchVideosUseCaseTest {
 
         useCase("kotlin").test {
             assertThat(awaitItem()).isEqualTo(UiState.Success(results))
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 
@@ -1356,7 +1356,7 @@ class SearchVideosUseCaseTest {
 
         useCase("kotlin").test {
             assertThat(awaitItem()).isEqualTo(UiState.Error("Search failed"))
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }
@@ -1431,7 +1431,7 @@ class GetVideoDetailsUseCaseTest {
 
         useCase("abcdefghijk").test {
             assertThat(awaitItem()).isEqualTo(UiState.Success(details))
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 
@@ -1441,7 +1441,7 @@ class GetVideoDetailsUseCaseTest {
 
         useCase("abcdefghijk").test {
             assertThat(awaitItem()).isEqualTo(UiState.Error("Video unavailable"))
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }
@@ -1516,7 +1516,7 @@ class GetCommentsUseCaseTest {
 
         useCase("dQw4w9WgXcQ").test {
             assertThat(awaitItem()).isEqualTo(UiState.Success(comments))
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 
@@ -1524,7 +1524,7 @@ class GetCommentsUseCaseTest {
     fun `forwards loading state`() = runTest {
         useCase("dQw4w9WgXcQ").test {
             assertThat(awaitItem()).isEqualTo(UiState.Loading)
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }
@@ -1599,7 +1599,7 @@ class GetVideoStreamUseCaseTest {
 
         useCase("abcdefghijk").test {
             assertThat(awaitItem()).isEqualTo(UiState.Success(stream))
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 
@@ -1609,7 +1609,7 @@ class GetVideoStreamUseCaseTest {
 
         useCase("abcdefghijk").test {
             assertThat(awaitItem()).isEqualTo(UiState.Error("No stream available"))
-            awaitComplete()
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }
