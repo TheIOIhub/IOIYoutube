@@ -929,8 +929,6 @@ interface CachedVideoDao {
 package com.ioi.youtube.data.mapper
 
 import com.ioi.youtube.data.local.CachedVideoEntity
-import com.ioi.youtube.data.local.CachedVideoDetailsEntity
-import com.ioi.youtube.domain.model.VideoDetails
 import com.ioi.youtube.domain.model.VideoSummary
 
 fun CachedVideoEntity.toDomain(): VideoSummary = VideoSummary(
