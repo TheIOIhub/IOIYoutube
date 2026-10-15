@@ -1395,9 +1395,9 @@ class VideoRepositoryImplTest {
         remote.feed = listOf(rawVideo("fresh1"), rawVideo("fresh2"))
 
         repository.getHomeFeed().test {
-            awaitItem()
-            awaitItem()
-            awaitItem()
+            assertThat(awaitItem()).isEqualTo(UiState.Loading)
+            assertThat((awaitItem() as UiState.Success).data.map { it.id })
+                .containsExactly("fresh1", "fresh2")
             awaitComplete()
         }
 
@@ -1572,7 +1572,7 @@ class VideoRepositoryImpl @Inject constructor(
             val fresh = remote.fetchHomeFeed()
             cachedVideoDao.replaceSource(
                 SOURCE_HOME,
-                fresh.map { it.toEntity(SOURCE_HOME, System.currentTimeMillis()) },
+                fresh.map { it.toDomain().toEntity(SOURCE_HOME, System.currentTimeMillis()) },
             )
             emit(UiState.Success(fresh.map { it.toDomain() }))
         } catch (e: Exception) {
