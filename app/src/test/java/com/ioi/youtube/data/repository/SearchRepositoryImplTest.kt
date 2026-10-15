@@ -56,6 +56,9 @@ class SearchRepositoryImplTest {
             assertThat(success.data.videos.map { it.id }).containsExactly("res1")
             awaitComplete()
         }
+
+        assertThat(videoDao.getBySource(SearchRepositoryImpl.searchKey("kotlin")).map { it.id })
+            .containsExactly("res1")
     }
 
     @Test
