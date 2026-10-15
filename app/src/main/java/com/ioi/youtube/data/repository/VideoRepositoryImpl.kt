@@ -11,6 +11,7 @@ import com.ioi.youtube.domain.model.VideoDetails
 import com.ioi.youtube.domain.model.VideoStream
 import com.ioi.youtube.domain.model.VideoSummary
 import com.ioi.youtube.domain.repository.VideoRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -35,16 +36,22 @@ class VideoRepositoryImpl @Inject constructor(
         if (cached.isNotEmpty()) {
             emit(UiState.Success(cached.map { it.toDomain() }, fromCache = true))
         }
-        try {
-            val fresh = remote.fetchHomeFeed()
+        val fresh = try {
+            remote.fetchHomeFeed()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (cached.isEmpty()) emit(UiState.Error(ERROR_LOAD_FEED, e))
+            return@flow
+        }
+        val domain = fresh.map { it.toDomain() }
+        runCatching {
             cachedVideoDao.replaceSource(
                 SOURCE_HOME,
                 fresh.map { it.toDomain().toEntity(SOURCE_HOME, System.currentTimeMillis()) },
             )
-            emit(UiState.Success(fresh.map { it.toDomain() }))
-        } catch (e: Exception) {
-            if (cached.isEmpty()) emit(UiState.Error(ERROR_LOAD_FEED, e))
         }
+        emit(UiState.Success(domain))
     }.flowOn(Dispatchers.IO)
 
     override fun getVideoDetails(videoId: String): Flow<UiState<VideoDetails>> = flow {
@@ -53,19 +60,26 @@ class VideoRepositoryImpl @Inject constructor(
         if (cached != null) {
             emit(UiState.Success(cached.toDomain(), fromCache = true))
         }
-        try {
-            val fresh = remote.fetchVideoDetails(videoId).toDomain()
-            cachedVideoDetailsDao.upsert(fresh.toDetailsEntity(System.currentTimeMillis()))
-            emit(UiState.Success(fresh))
+        val fresh = try {
+            remote.fetchVideoDetails(videoId).toDomain()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (cached == null) emit(UiState.Error(ERROR_LOAD_DETAILS, e))
+            return@flow
         }
+        runCatching {
+            cachedVideoDetailsDao.upsert(fresh.toDetailsEntity(System.currentTimeMillis()))
+        }
+        emit(UiState.Success(fresh))
     }.flowOn(Dispatchers.IO)
 
     override fun getVideoStream(videoId: String): Flow<UiState<VideoStream>> = flow {
         emit(UiState.Loading)
         try {
             emit(UiState.Success(remote.fetchVideoStream(videoId).toDomain()))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             emit(UiState.Error(ERROR_LOAD_STREAM, e))
         }
