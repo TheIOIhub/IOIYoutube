@@ -34,7 +34,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -316,7 +315,7 @@ class VideoCardTest {
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.presentation.components.VideoCardTest"`
 
-Expected: PASS (4 тести). Robolectric виконує Compose у LEGACY-режимi — картинки не завантажуються, тексти працють.
+Expected: PASS (5 тестiв). Robolectric виконує Compose у LEGACY-режимi — картинки не завантажуються, тексти працють.
 
 - [ ] **Step 6: Коміт**
 
@@ -627,6 +626,22 @@ class HomeScreenTest {
 
         composeRule.onNodeWithText("Cached video").assertExists()
         composeRule.onNodeWithText("Немає з'єднання — показано кеш").assertExists()
+    }
+
+    @Test
+    fun `non-cached success hides offline banner`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                HomeScreen(
+                    uiState = UiState.Success(listOf(TestData.video(title = "Fresh video"))),
+                    onVideoClick = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Fresh video").assertExists()
+        composeRule.onNodeWithText("Немає з'єднання — показано кеш").assertDoesNotExist()
     }
 
     @Test
