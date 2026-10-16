@@ -447,15 +447,16 @@ class HomeViewModelTest {
         repository.setFeed(UiState.Success(listOf(TestData.video())))
         val viewModel = createViewModel()
 
-        val job = kotlinx.coroutines.launch { viewModel.uiState.collect {} }
-        advanceUntilIdle()
-        assertThat(repository.feedCalls).isEqualTo(1)
+        viewModel.uiState.test {
+            advanceUntilIdle()
+            assertThat(repository.feedCalls).isEqualTo(1)
 
-        viewModel.retry()
-        advanceUntilIdle()
+            viewModel.retry()
+            advanceUntilIdle()
 
-        assertThat(repository.feedCalls).isEqualTo(2)
-        job.cancel()
+            assertThat(repository.feedCalls).isEqualTo(2)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     @Test
@@ -471,7 +472,7 @@ class HomeViewModelTest {
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.presentation.home.HomeViewModelTest"`
 
-Expected: PASS (5 тестiв).
+Expected: PASS (4 тестiв).
 
 - [ ] **Step 4: Коміт**
 
