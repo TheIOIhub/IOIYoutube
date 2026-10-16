@@ -62,6 +62,22 @@ class HomeScreenTest {
     }
 
     @Test
+    fun `non-cached success hides offline banner`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                HomeScreen(
+                    uiState = UiState.Success(listOf(TestData.video(title = "Fresh video"))),
+                    onVideoClick = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Fresh video").assertExists()
+        composeRule.onNodeWithText("Немає з'єднання — показано кеш").assertDoesNotExist()
+    }
+
+    @Test
     fun `error state shows message and retry`() {
         var retried = false
 
