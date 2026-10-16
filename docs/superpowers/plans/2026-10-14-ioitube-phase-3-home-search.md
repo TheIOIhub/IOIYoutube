@@ -247,7 +247,6 @@ package com.ioi.youtube.presentation.components
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import com.ioi.youtube.presentation.theme.IOITubeTheme
 import com.ioi.youtube.testutil.TestData
