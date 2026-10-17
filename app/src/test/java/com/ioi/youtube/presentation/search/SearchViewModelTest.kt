@@ -101,6 +101,23 @@ class SearchViewModelTest {
     }
 
     @Test
+    fun `query is trimmed before search`() = runTest(testDispatcher) {
+        repository.setResults(UiState.Success(SearchResults("kotlin", listOf(TestData.video()))))
+        val viewModel = createViewModel()
+
+        viewModel.uiState.test {
+            assertThat(awaitItem()).isEqualTo(UiState.Loading)
+            viewModel.onQueryChange("  kotlin  ")
+            advanceTimeBy(400)
+            assertThat(awaitItem()).isInstanceOf(UiState.Success::class.java)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertThat(repository.searchCalls).isEqualTo(1)
+        assertThat(repository.lastQuery).isEqualTo("kotlin")
+    }
+
+    @Test
     fun `error state is forwarded`() = runTest(testDispatcher) {
         repository.setResults(UiState.Error("Не вдалося виконати пошук"))
         val viewModel = createViewModel()
