@@ -778,6 +778,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -852,25 +853,28 @@ class SearchViewModelTest {
         repository.setResults(UiState.Success(SearchResults("android", emptyList())))
         val viewModel = createViewModel()
 
-        val job = kotlinx.coroutines.launch { viewModel.uiState.collect {} }
-        advanceTimeBy(500)
-        viewModel.onQueryChange("android")
-        advanceTimeBy(500)
-        assertThat(repository.searchCalls).isEqualTo(1)
+        viewModel.uiState.test {
+            advanceUntilIdle()
+            viewModel.onQueryChange("android")
+            advanceUntilIdle()
+            assertThat(repository.searchCalls).isEqualTo(1)
 
-        viewModel.retry()
-        advanceTimeBy(500)
+            viewModel.retry()
+            advanceUntilIdle()
 
-        assertThat(repository.searchCalls).isEqualTo(2)
-        job.cancel()
+            assertThat(repository.searchCalls).isEqualTo(2)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     @Test
     fun `error state is forwarded`() = runTest(testDispatcher) {
         repository.setResults(UiState.Error("Не вдалося виконати пошук"))
+        val viewModel = createViewModel()
 
-        createViewModel().uiState.test {
+        viewModel.uiState.test {
             assertThat(awaitItem()).isEqualTo(UiState.Loading)
+            viewModel.onQueryChange("android")
             advanceTimeBy(400)
             assertThat(awaitItem()).isEqualTo(UiState.Error("Не вдалося виконати пошук"))
             cancelAndIgnoreRemainingEvents()
@@ -883,7 +887,7 @@ class SearchViewModelTest {
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.presentation.search.SearchViewModelTest"`
 
-Expected: PASS (6 тестiв). Покриває Review Focus №2 (порожній запит).
+Expected: PASS (5 тестiв). Покриває Review Focus №2 (порожній запит).
 
 - [ ] **Step 4: Коміт**
 
