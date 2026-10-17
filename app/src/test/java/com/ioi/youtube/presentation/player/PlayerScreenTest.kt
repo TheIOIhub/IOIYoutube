@@ -2,7 +2,6 @@ package com.ioi.youtube.presentation.player
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -77,6 +76,8 @@ class PlayerScreenTest {
 
         // The last LazyColumn item (RecommendationsSection) sits below the 320x470dp Robolectric
         // test window viewport, so it is not composed until we scroll. Swipe on the root to reveal it.
+        // A semantics-based scroll is unusable here: onNode(hasScrollAction()).performScrollToNode(...)
+        // fails with "Expected exactly '1' node but found '2' nodes that satisfy: (ScrollBy is defined)".
         composeRule.onRoot().performGesture {
             swipeUp(startY = 400f, endY = 50f, durationMillis = 300)
         }
