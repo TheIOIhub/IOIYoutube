@@ -487,7 +487,7 @@ git commit -m "feat: add home view model with tests"
 **Files:**
 - Create: `app/src/main/java/com/ioi/youtube/presentation/home/HomeScreen.kt`
 - Test: `app/src/test/java/com/ioi/youtube/presentation/home/HomeScreenTest.kt`
-- Modify: `app/src/main/java/com/ioi/youtube/presentation/home/HomeScreenPlaceholder.kt` — залишити файл, але вiн бiльше не використовується пiсля Task 3.6 (видалять там).
+- Untouched: `app/src/main/java/com/ioi/youtube/presentation/home/HomeScreenPlaceholder.kt` — не змiнювати (стає невикористаним; видаляється у Task 3.6).
 
 **Interfaces:**
 - Consumes: `HomeViewModel` (Task 3.2), компоненти (Task 3.1).
