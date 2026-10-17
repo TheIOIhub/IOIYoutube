@@ -712,6 +712,14 @@ private fun CommentItem(
             }
             Text(text = comment.text, style = MaterialTheme.typography.bodyMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (comment.publishedTime != null) {
+                    Text(
+                        text = comment.publishedTime,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 Text(
                     text = Formatters.formatCount(comment.likeCount),
                     style = MaterialTheme.typography.labelSmall,
