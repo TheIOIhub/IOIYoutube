@@ -375,6 +375,8 @@ git commit -m "feat: add media3 video player composable"
 
 ### Task 4.3: PlayerRoute + PlayerScreen (плеєр + метадані + опис)
 
+> **Порядок виконання (ruling контролера): 4.5 → 4.4 → 4.3 → 4.6.** План у початковому виглядi мав 4.3/4.4 з промiжно зламаною збiркою та одним спiльним комiтом; щоб кожна таска компiлювалась, комiтилась i проходила рев'ю окремо, секцiї створюються ранiше за `PlayerScreen`.
+
 **Files:**
 - Create: `app/src/main/java/com/ioi/youtube/presentation/player/PlayerScreen.kt`
 - Delete: `app/src/main/java/com/ioi/youtube/presentation/player/PlayerScreenPlaceholder.kt`
@@ -556,7 +558,7 @@ private fun StreamErrorRow(
 
 private fun buildMetaLine(details: VideoDetails): String = listOfNotNull(
     Formatters.formatViews(details.viewCount),
-    Formatters.formatCount(details.likeCount).let { "$it лайкiв" },
+    Formatters.formatCount(details.likeCount).let { "$it лайків" },
     details.uploadDate,
 ).joinToString(" · ")
 ```
@@ -589,13 +591,18 @@ import com.ioi.youtube.presentation.player.PlayerRoute
 
 (Рядок `import com.ioi.youtube.presentation.player.PlayerScreenPlaceholder` видали.)
 
-- [ ] **Step 4: Перевір збірку — очiкуємо помилку про CommentsSection**
+- [ ] **Step 4: Перевір збірку**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:assembleDebug`
 
-Expected: FAIL з `Unresolved reference: CommentsSection` — це очiкувано, Task 4.4 його створює. Якщо iнша помилка — виправ перед продовженням.
+Expected: `BUILD SUCCESSFUL` — `CommentsSection` i `RecommendationsSection` вже iснують (контролерський ruling: порядок фаз 4.5 → 4.4 → 4.3).
 
-- [ ] **Step 5: Коміт (тимчасово з возможливим чернетковим станом не комiтимо — виконай одразу Task 4.4)**
+- [ ] **Step 5: Коміт**
+
+```bash
+git add -A app/src
+git commit -m "feat: add player screen with comments and recommendations"
+```
 
 ---
 
@@ -743,9 +750,14 @@ private fun CommentItem(
 
 Run: `./gradlew :app:compileDebugKotlin`
 
-Expected: FAIL з `Unresolved reference: RecommendationsSection` — Task 4.5 створює його. Iнших помилок бути не повинно.
+Expected: `BUILD SUCCESSFUL` (`RecommendationsSection` вже iснує — Task 4.5 виконано першим).
 
-- [ ] **Step 3: Коміт чернетки разом із Task 4.5 (не комiти тут)**
+- [ ] **Step 3: Коміт**
+
+```bash
+git add app/src/main/java/com/ioi/youtube/presentation/player/CommentsSection.kt
+git commit -m "feat: add comments section composable"
+```
 
 ---
 
@@ -851,11 +863,11 @@ Run: `./gradlew :app:assembleDebug`
 
 Expected: `BUILD SUCCESSFUL` — екран відео збирається повнiстю.
 
-- [ ] **Step 3: Коміт (Tasks 4.3–4.5)**
+- [ ] **Step 3: Коміт**
 
 ```bash
-git add -A
-git commit -m "feat: add player screen with comments and recommendations"
+git add app/src/main/java/com/ioi/youtube/presentation/player/RecommendationsSection.kt
+git commit -m "feat: add recommendations section composable"
 ```
 
 ---
