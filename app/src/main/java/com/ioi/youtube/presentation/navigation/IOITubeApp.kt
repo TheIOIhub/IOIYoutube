@@ -19,7 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ioi.youtube.presentation.home.HomeRoute
-import com.ioi.youtube.presentation.player.PlayerScreenPlaceholder
+import com.ioi.youtube.presentation.player.PlayerRoute
 import com.ioi.youtube.presentation.search.SearchRoute
 
 @Composable
@@ -67,9 +67,12 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
                     },
                 )
             }
-            composable(Routes.PLAYER) { entry ->
-                val videoId = entry.arguments?.getString(Routes.ARG_VIDEO_ID).orEmpty()
-                PlayerScreenPlaceholder(videoId = videoId)
+            composable(Routes.PLAYER) {
+                PlayerRoute(
+                    onVideoClick = { videoId ->
+                        navController.navigate(Routes.player(videoId))
+                    },
+                )
             }
         }
     }
