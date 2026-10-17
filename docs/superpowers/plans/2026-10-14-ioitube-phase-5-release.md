@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,7 +48,6 @@ import com.ioi.youtube.presentation.components.LoadingBox
 import com.ioi.youtube.presentation.components.OfflineBanner
 import com.ioi.youtube.presentation.components.VideoCard
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeRoute(
     onVideoClick: (String) -> Unit,
@@ -71,12 +71,15 @@ fun HomeScreen(
 ) {
     var refreshing by remember { mutableStateOf(false) }
 
+    LaunchedEffect(uiState) {
+        refreshing = false
+    }
+
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = {
             refreshing = true
             onRetry()
-            refreshing = false
         },
     ) {
         when (uiState) {
@@ -128,6 +131,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -144,7 +148,6 @@ import com.ioi.youtube.presentation.components.ErrorBox
 import com.ioi.youtube.presentation.components.LoadingBox
 import com.ioi.youtube.presentation.components.VideoGridCard
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchRoute(
     onVideoClick: (String) -> Unit,
@@ -187,12 +190,15 @@ fun SearchScreen(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         )
 
+        LaunchedEffect(uiState) {
+            refreshing = false
+        }
+
         PullToRefreshBox(
             isRefreshing = refreshing,
             onRefresh = {
                 refreshing = true
                 onRetry()
-                refreshing = false
             },
         ) {
             when (uiState) {
