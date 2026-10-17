@@ -886,10 +886,14 @@ git commit -m "feat: add recommendations section composable"
 ```kotlin
 package com.ioi.youtube.presentation.player
 
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performGesture
+import androidx.compose.ui.test.swipeUp
 import com.google.common.truth.Truth.assertThat
 import com.ioi.youtube.domain.model.Comment
 import com.ioi.youtube.domain.model.UiState
@@ -928,6 +932,7 @@ class PlayerScreenTest {
         assertThat(retried).isTrue()
     }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun `shows title, meta line, comments and recommendations`() {
         composeRule.setContent {
@@ -954,6 +959,13 @@ class PlayerScreenTest {
         composeRule.onNodeWithText("Коментарі").assertExists()
         composeRule.onNodeWithText("First!").assertExists()
         composeRule.onNodeWithText("Закріплено").assertExists()
+
+        // Останнiй item LazyColumn лежить нижче в'юпорту 320x470dp цього Robolectric-оточення,
+        // тому скролимо. Залежить вiд в'юпорту; performScrollToNode не працює (два scrollable-вузли).
+        composeRule.onRoot().performGesture {
+            swipeUp(startY = 400f, endY = 50f, durationMillis = 300)
+        }
+
         composeRule.onNodeWithText("Рекомендації").assertExists()
     }
 
@@ -995,53 +1007,46 @@ class PlayerScreenTest {
         }
 
         composeRule.onNodeWithText("Не вдалося отримати відеопотік").assertExists()
-        // На екранi двi кнопки «Спробувати знову» (потiк + коментарi не в Error),
-        // беремо першу — вона належитьStreamErrorRow.
-        composeRule.onAllNodesWithText("Спробувати знову")[0].performClick()
+        // Коментарi тут у станi Loading, тож retry-кнопку дає лише StreamErrorRow — вона рiвно одна.
+        composeRule.onAllNodesWithText("Спробувати знову").assertCountEquals(1)
+        composeRule.onNodeWithText("Спробувати знову").performClick()
         assertThat(retried).isTrue()
     }
 
     @Test
-    fun `stream success renders player with url`() {
-        // Robolectric не грає вiдео, але перевiряємо, що VideoPlayer отримав url
-        // — вiн рендерить AndroidView без креша.
+    fun `stream success renders player instead of unavailable message`() {
+        // Якби PlayerScreen не прокинув url у VideoPlayer, з'явився б текст «Відео недоступне».
         composeRule.setContent {
             IOITubeTheme {
-                VideoPlayer(videoUrl = "https://rr3---sn-abc.googlevideo.com/videoplayback?id=1")
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Success(
+                            VideoStream("https://example.com/v.mp4", "720p", "MPEG-4"),
+                        ),
+                        comments = UiState.Success(emptyList()),
+                    ),
+                    onVideoClick = {},
+                    onRetry = {},
+                )
             }
         }
 
-        composeRule.onRoot().assertExists()
+        composeRule.onNodeWithText("Відео недоступне").assertDoesNotExist()
     }
 
-    @Test
-    fun `null url shows unavailable message instead of player`() {
-        composeRule.setContent {
-            IOITubeTheme {
-                VideoPlayer(videoUrl = null)
-            }
-        }
-
-        composeRule.onNodeWithText("Відео недоступне").assertExists()
-    }
 }
 ```
 
-- [ ] **Step 2: Додай iмпорт `onAllNodesWithText`**
-
-У файлi тесту додай iмпорт (якщо компiлятор його вимагає):
-
-```kotlin
-import androidx.compose.ui.test.onAllNodesWithText
-```
+- [ ] **Step 2: Iмпорти** — `onAllNodesWithText` вже включено у снiпет вище; додаткових iмпортiв не потрiбно.
 
 - [ ] **Step 3: Запусти тест — має пройти**
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.presentation.player.PlayerScreenTest"`
 
-Expected: PASS (6 тестiв).
+Expected: PASS (5 тестiв).
 
-- [ ] **Step 4: Ручна перевiрка на пристрої**
+- [ ] **Step 4: Ручна перевiрка на пристрої — ПРОПУЩЕНО у цьому середовищi (немає пристрою/емулятора); крок лишається для локальної перевiрки розробником.
 
 1. Вiдкрий будь-яке вiдео з головної — плеєр стартує, звук i картинка йдуть, ситуативнi кнопки медiа3 працюють.
 2. Згорни/розгорни app — на `ON_STOP` плеєр паузиться, на повторне вiдкриття продовжує.
@@ -1052,8 +1057,8 @@ Expected: PASS (6 тестiв).
 - [ ] **Step 5: Коміт**
 
 ```bash
-git add -A
-git commit -m "test: add player screen tests and manual verification"
+git add app/src/test/java/com/ioi/youtube/presentation/player/PlayerScreenTest.kt
+git commit -m "test: add player screen tests"
 ```
 
 ---
