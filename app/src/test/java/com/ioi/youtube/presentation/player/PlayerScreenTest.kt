@@ -1,0 +1,143 @@
+package com.ioi.youtube.presentation.player
+
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performGesture
+import androidx.compose.ui.test.swipeUp
+import com.google.common.truth.Truth.assertThat
+import com.ioi.youtube.domain.model.Comment
+import com.ioi.youtube.domain.model.UiState
+import com.ioi.youtube.domain.model.VideoStream
+import com.ioi.youtube.presentation.theme.IOITubeTheme
+import com.ioi.youtube.testutil.TestData
+import kotlin.OptIn
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class PlayerScreenTest {
+
+    @get:Rule
+    val composeRule = createComposeRule()
+
+    @Test
+    fun `video error replaces player with message and retry`() {
+        var retried = false
+
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(video = UiState.Error("Не вдалося завантажити відео")),
+                    onVideoClick = {},
+                    onRetry = { retried = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Не вдалося завантажити відео").assertExists()
+        composeRule.onNodeWithText("Спробувати знову").performClick()
+        assertThat(retried).isTrue()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `shows title, meta line, comments and recommendations`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Loading,
+                        comments = UiState.Success(
+                            listOf(
+                                Comment("c1", "Alice", null, "First!", 150, "1 day ago", true, true),
+                            ),
+                        ),
+                    ),
+                    onVideoClick = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Video dQw4w9WgXcQ").assertExists()
+        composeRule.onNodeWithText("Test Channel").assertExists()
+        composeRule.onNodeWithText("1.5M views", substring = true).assertExists()
+        composeRule.onNodeWithText("Коментарі").assertExists()
+        composeRule.onNodeWithText("First!").assertExists()
+        composeRule.onNodeWithText("Закріплено").assertExists()
+
+        // The last LazyColumn item is below the test window viewport in this
+        // Robolectric environment; scroll the root to compose it.
+        composeRule.onRoot().performGesture {
+            swipeUp(startY = 400f, endY = 50f, durationMillis = 300)
+        }
+
+        composeRule.onNodeWithText("Рекомендації").assertExists()
+    }
+
+    @Test
+    fun `offline cached video shows banner`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ"), fromCache = true),
+                        stream = UiState.Loading,
+                        comments = UiState.Success(emptyList()),
+                    ),
+                    onVideoClick = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Немає з'єднання — показано кеш").assertExists()
+    }
+
+    @Test
+    fun `stream error shows row with retry`() {
+        var retried = false
+
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Error("Не вдалося отримати відеопотік"),
+                        comments = UiState.Loading,
+                    ),
+                    onVideoClick = {},
+                    onRetry = { retried = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Не вдалося отримати відеопотік").assertExists()
+        // На екрані дві кнопки «Спробувати знову» (потік + коментарі не в Error),
+        // беремо першу — вона належить StreamErrorRow.
+        composeRule.onAllNodesWithText("Спробувати знову")[0].performClick()
+        assertThat(retried).isTrue()
+    }
+
+    @Test
+    fun `stream success renders player with url`() {
+        // Robolectric не грає відео, але перевіряємо, що VideoPlayer отримав url
+        // — він рендерить AndroidView без креша.
+        composeRule.setContent {
+            IOITubeTheme {
+                VideoPlayer(videoUrl = "https://rr3---sn-abc.googlevideo.com/videoplayback?id=1")
+            }
+        }
+
+        composeRule.onRoot().assertExists()
+    }
+}
