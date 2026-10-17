@@ -315,7 +315,7 @@ class VideoCardTest {
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.presentation.components.VideoCardTest"`
 
-Expected: PASS (6 тестiв). Robolectric виконує Compose у LEGACY-режимi — картинки не завантажуються, тексти працють.
+Expected: PASS (3 тести). Robolectric виконує Compose у LEGACY-режимi — картинки не завантажуються, тексти працють.
 
 - [ ] **Step 6: Коміт**
 
@@ -681,7 +681,7 @@ class HomeScreenTest {
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.presentation.home.HomeScreenTest"`
 
-Expected: PASS (4 тести).
+Expected: PASS (5 тестiв).
 
 - [ ] **Step 4: Коміт**
 
@@ -904,7 +904,7 @@ class SearchViewModelTest {
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.presentation.search.SearchViewModelTest"`
 
-Expected: PASS (5 тестiв). Покриває Review Focus №2 (порожній запит).
+Expected: PASS (6 тестiв). Покриває Review Focus №2 (порожній запит).
 
 - [ ] **Step 4: Коміт**
 
