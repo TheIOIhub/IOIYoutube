@@ -949,7 +949,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.text.input.ImeAction
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -1033,9 +1033,9 @@ fun SearchScreen(
 ```kotlin
 package com.ioi.youtube.presentation.search
 
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import com.google.common.truth.Truth.assertThat
@@ -1071,7 +1071,7 @@ class SearchScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("Пошук відео").performTextInput("kot")
+        composeRule.onNode(hasSetTextAction()).performTextInput("kot")
         assertThat(query).isEqualTo("kot")
     }
 
