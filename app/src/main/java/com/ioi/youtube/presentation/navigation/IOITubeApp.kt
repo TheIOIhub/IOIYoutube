@@ -18,9 +18,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.ioi.youtube.presentation.home.HomeScreenPlaceholder
+import com.ioi.youtube.presentation.home.HomeRoute
 import com.ioi.youtube.presentation.player.PlayerScreenPlaceholder
-import com.ioi.youtube.presentation.search.SearchScreenPlaceholder
+import com.ioi.youtube.presentation.search.SearchRoute
 
 @Composable
 fun IOITubeApp(navController: NavHostController = rememberNavController()) {
@@ -53,8 +53,20 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
             startDestination = Routes.HOME,
             modifier = Modifier.padding(padding),
         ) {
-            composable(Routes.HOME) { HomeScreenPlaceholder() }
-            composable(Routes.SEARCH) { SearchScreenPlaceholder() }
+            composable(Routes.HOME) {
+                HomeRoute(
+                    onVideoClick = { videoId ->
+                        navController.navigate(Routes.player(videoId))
+                    },
+                )
+            }
+            composable(Routes.SEARCH) {
+                SearchRoute(
+                    onVideoClick = { videoId ->
+                        navController.navigate(Routes.player(videoId))
+                    },
+                )
+            }
             composable(Routes.PLAYER) { entry ->
                 val videoId = entry.arguments?.getString(Routes.ARG_VIDEO_ID).orEmpty()
                 PlayerScreenPlaceholder(videoId = videoId)
