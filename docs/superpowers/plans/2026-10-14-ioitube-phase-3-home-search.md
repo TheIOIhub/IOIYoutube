@@ -1034,6 +1034,7 @@ fun SearchScreen(
 package com.ioi.youtube.presentation.search
 
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -1073,24 +1074,29 @@ class SearchScreenTest {
 
         composeRule.onNode(hasSetTextAction()).performTextInput("kot")
         assertThat(query).isEqualTo("kot")
+        composeRule.onNode(hasText("kot")).assertExists()
     }
 
     @Test
     fun `results grid shows videos`() {
         val videos = listOf(TestData.video(id = "aaaaaaaaaaa", title = "Grid result"))
+        var clicked: String? = null
 
         composeRule.setContent {
             IOITubeTheme {
                 SearchScreen(
                     uiState = UiState.Success(SearchResults("grid", videos)),
                     onQueryChange = {},
-                    onVideoClick = {},
+                    onVideoClick = { clicked = it },
                     onRetry = {},
                 )
             }
         }
 
         composeRule.onNodeWithText("Grid result").assertExists()
+        composeRule.onNodeWithText("Grid result").performClick()
+        assertThat(clicked).isEqualTo("aaaaaaaaaaa")
+        composeRule.onNodeWithText("Немає з'єднання — показано кеш").assertDoesNotExist()
     }
 
     @Test
@@ -1130,6 +1136,22 @@ class SearchScreenTest {
         composeRule.onNodeWithText("Спробувати знову").performClick()
         assertThat(retried).isTrue()
     }
+
+    @Test
+    fun `empty results show empty box`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                SearchScreen(
+                    uiState = UiState.Success(SearchResults("none", emptyList())),
+                    onQueryChange = {},
+                    onVideoClick = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Нічого не знайдено").assertExists()
+    }
 }
 ```
 
@@ -1137,7 +1159,7 @@ class SearchScreenTest {
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.presentation.search.SearchScreenTest"`
 
-Expected: PASS (4 тести).
+Expected: PASS (5 тестiв).
 
 - [ ] **Step 4: Коміт**
 
