@@ -75,8 +75,8 @@ class PlayerScreenTest {
         composeRule.onNodeWithText("First!").assertExists()
         composeRule.onNodeWithText("Закріплено").assertExists()
 
-        // The last LazyColumn item is below the test window viewport in this
-        // Robolectric environment; scroll the root to compose it.
+        // The last LazyColumn item (RecommendationsSection) sits below the 320x470dp Robolectric
+        // test window viewport, so it is not composed until we scroll. Swipe on the root to reveal it.
         composeRule.onRoot().performGesture {
             swipeUp(startY = 400f, endY = 50f, durationMillis = 300)
         }
@@ -122,22 +122,30 @@ class PlayerScreenTest {
         }
 
         composeRule.onNodeWithText("Не вдалося отримати відеопотік").assertExists()
-        // На екрані дві кнопки «Спробувати знову» (потік + коментарі не в Error),
-        // беремо першу — вона належить StreamErrorRow.
-        composeRule.onAllNodesWithText("Спробувати знову")[0].performClick()
+        // Коментарі тут у стані Loading, тож retry-кнопку дає лише StreamErrorRow — вона рівно одна.
+        // onNodeWithText вимагає рівно одного вузла, що еквівалентно перевірці count == 1.
+        composeRule.onNodeWithText("Спробувати знову").performClick()
         assertThat(retried).isTrue()
     }
 
     @Test
-    fun `stream success renders player with url`() {
-        // Robolectric не грає відео, але перевіряємо, що VideoPlayer отримав url
-        // — він рендерить AndroidView без креша.
+    fun `stream success renders player instead of unavailable message`() {
         composeRule.setContent {
             IOITubeTheme {
-                VideoPlayer(videoUrl = "https://rr3---sn-abc.googlevideo.com/videoplayback?id=1")
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Success(
+                            VideoStream("https://example.com/v.mp4", "720p", "MPEG-4"),
+                        ),
+                        comments = UiState.Success(emptyList()),
+                    ),
+                    onVideoClick = {},
+                    onRetry = {},
+                )
             }
         }
 
-        composeRule.onRoot().assertExists()
+        composeRule.onNodeWithText("Відео недоступне").assertDoesNotExist()
     }
 }
