@@ -41,6 +41,7 @@ import com.ioi.youtube.testutil.TestData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -87,6 +88,7 @@ class PlayerViewModelTest {
         commentRepository.setComments(UiState.Success(TestData.comments()))
 
         createViewModel().uiState.test {
+            awaitItem() // stateIn initialValue: all Loading
             val state = awaitItem()
             assertThat((state.video as UiState.Success).data.title).isEqualTo("Video dQw4w9WgXcQ")
             assertThat((state.stream as UiState.Success).data.url).isEqualTo("https://v/1")
@@ -102,6 +104,7 @@ class PlayerViewModelTest {
         commentRepository.setComments(UiState.Error("Не вдалося завантажити коментарі"))
 
         createViewModel().uiState.test {
+            awaitItem() // stateIn initialValue: all Loading
             val state = awaitItem()
             assertThat(state.video).isInstanceOf(UiState.Success::class.java)
             assertThat((state.stream as UiState.Error).message).isEqualTo("Не вдалося отримати відеопотік")
@@ -114,17 +117,18 @@ class PlayerViewModelTest {
     fun `retry restarts all three flows`() = runTest(testDispatcher) {
         val viewModel = createViewModel()
 
-        val job = kotlinx.coroutines.launch { viewModel.uiState.collect {} }
-        kotlinx.coroutines.test.advanceUntilIdle()
-        assertThat(videoRepository.detailsCalls).isEqualTo(1)
-        assertThat(commentRepository.commentsCalls).isEqualTo(1)
+        viewModel.uiState.test {
+            advanceUntilIdle()
+            assertThat(videoRepository.detailsCalls).isEqualTo(1)
+            assertThat(commentRepository.commentsCalls).isEqualTo(1)
 
-        viewModel.retry()
-        kotlinx.coroutines.test.advanceUntilIdle()
+            viewModel.retry()
+            advanceUntilIdle()
 
-        assertThat(videoRepository.detailsCalls).isEqualTo(2)
-        assertThat(commentRepository.commentsCalls).isEqualTo(2)
-        job.cancel()
+            assertThat(videoRepository.detailsCalls).isEqualTo(2)
+            assertThat(commentRepository.commentsCalls).isEqualTo(2)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }
 ```
