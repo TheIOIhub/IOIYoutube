@@ -168,6 +168,6 @@ private fun StreamErrorRow(
 
 private fun buildMetaLine(details: VideoDetails): String = listOfNotNull(
     Formatters.formatViews(details.viewCount),
-    Formatters.formatCount(details.likeCount).let { "$it лайкiв" },
+    Formatters.formatCount(details.likeCount).let { "$it лайків" },
     details.uploadDate,
 ).joinToString(" · ")
