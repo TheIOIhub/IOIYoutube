@@ -228,6 +228,7 @@ git commit -m "feat: add player view model combining details stream comments"
 
 **Files:**
 - Create: `app/src/main/java/com/ioi/youtube/presentation/player/VideoPlayer.kt`
+- Test: `app/src/test/java/com/ioi/youtube/presentation/player/VideoPlayerTest.kt` — покриває лише fallback-гiлку (`null`/blank url); шлях вiдтворення ExoPlayer пiд Robolectric не тестується.
 
 **Interfaces:**
 - Consumes: Media3 (підключений у Task 1.2).
@@ -309,6 +310,51 @@ fun VideoPlayer(
             }
         },
     )
+}
+```
+
+- [ ] **Step 1b: Напиши тест `VideoPlayerTest.kt` (fallback-гiлка)**
+
+```kotlin
+package com.ioi.youtube.presentation.player
+
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import com.ioi.youtube.presentation.theme.IOITubeTheme
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class VideoPlayerTest {
+
+    @get:Rule
+    val composeRule = createComposeRule()
+
+    @Test
+    fun `null url shows unavailable message instead of player`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                VideoPlayer(videoUrl = null)
+            }
+        }
+
+        composeRule.onNodeWithText("Відео недоступне").assertExists()
+    }
+
+    @Test
+    fun `blank url shows unavailable message instead of player`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                VideoPlayer(videoUrl = "   ")
+            }
+        }
+
+        composeRule.onNodeWithText("Відео недоступне").assertExists()
+    }
 }
 ```
 
