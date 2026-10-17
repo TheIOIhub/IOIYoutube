@@ -120,12 +120,14 @@ class PlayerViewModelTest {
         viewModel.uiState.test {
             advanceUntilIdle()
             assertThat(videoRepository.detailsCalls).isEqualTo(1)
+            assertThat(videoRepository.streamCalls).isEqualTo(1)
             assertThat(commentRepository.commentsCalls).isEqualTo(1)
 
             viewModel.retry()
             advanceUntilIdle()
 
             assertThat(videoRepository.detailsCalls).isEqualTo(2)
+            assertThat(videoRepository.streamCalls).isEqualTo(2)
             assertThat(commentRepository.commentsCalls).isEqualTo(2)
             cancelAndIgnoreRemainingEvents()
         }
