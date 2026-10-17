@@ -315,7 +315,7 @@ class VideoCardTest {
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.presentation.components.VideoCardTest"`
 
-Expected: PASS (5 тестiв). Robolectric виконує Compose у LEGACY-режимi — картинки не завантажуються, тексти працють.
+Expected: PASS (6 тестiв). Robolectric виконує Compose у LEGACY-режимi — картинки не завантажуються, тексти працють.
 
 - [ ] **Step 6: Коміт**
 
@@ -846,6 +846,23 @@ class SearchViewModelTest {
             assertThat(repository.searchCalls).isEqualTo(1)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `query is trimmed before search`() = runTest(testDispatcher) {
+        repository.setResults(UiState.Success(SearchResults("kotlin", listOf(TestData.video()))))
+        val viewModel = createViewModel()
+
+        viewModel.uiState.test {
+            assertThat(awaitItem()).isEqualTo(UiState.Loading)
+            viewModel.onQueryChange("  kotlin  ")
+            advanceTimeBy(400)
+            assertThat(awaitItem()).isInstanceOf(UiState.Success::class.java)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertThat(repository.searchCalls).isEqualTo(1)
+        assertThat(repository.lastQuery).isEqualTo("kotlin")
     }
 
     @Test

@@ -1139,6 +1139,8 @@ class FakeSearchRepository : SearchRepository {
 
     var searchCalls = 0
         private set
+    var lastQuery: String? = null
+        private set
 
     fun setResults(state: UiState<SearchResults>) {
         results.value = state
@@ -1146,6 +1148,7 @@ class FakeSearchRepository : SearchRepository {
 
     override fun search(query: String): Flow<UiState<SearchResults>> {
         searchCalls++
+        lastQuery = query
         return results
     }
 }
