@@ -10,10 +10,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +48,7 @@ fun SearchRoute(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     uiState: UiState<SearchResults>,
@@ -54,6 +58,11 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     var text by remember { mutableStateOf("") }
+    var refreshing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(uiState) {
+        refreshing = false
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         OutlinedTextField(
@@ -71,24 +80,34 @@ fun SearchScreen(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         )
 
-        when (uiState) {
-            is UiState.Loading -> LoadingBox()
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                onRetry()
+            },
+        ) {
+            when (uiState) {
+                is UiState.Loading -> LoadingBox()
 
-            is UiState.Error -> ErrorBox(message = uiState.message, onRetry = onRetry)
+                is UiState.Error -> ErrorBox(message = uiState.message, onRetry = onRetry)
 
-            is UiState.Success -> {
-                if (uiState.data.videos.isEmpty()) {
-                    EmptyBox(text = "Нічого не знайдено")
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        if (uiState.fromCache) {
-                            item(key = "offline-banner") { OfflineBanner() }
-                        }
-                        items(items = uiState.data.videos, key = { it.id }) { video ->
-                            VideoGridCard(video = video, onClick = onVideoClick)
+                is UiState.Success -> {
+                    if (uiState.data.videos.isEmpty()) {
+                        EmptyBox(text = "Нічого не знайдено")
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            if (uiState.fromCache) {
+                                item(key = "offline-banner") {
+                                    com.ioi.youtube.presentation.components.OfflineBanner()
+                                }
+                            }
+                            items(items = uiState.data.videos, key = { it.id }) { video ->
+                                VideoGridCard(video = video, onClick = onVideoClick)
+                            }
                         }
                     }
                 }
