@@ -55,12 +55,21 @@ adb install -r dist/IOITube-1.0-release.apk
 
 ## 4. Якщо щось впало — що прикріпити
 
+Застосунок тепер логує справжню помилку мережi пiд тегом `IOITube`:
+
 ```bash
 adb logcat -c                                   # очистити буфер
 # ...відтворити проблему...
-adb logcat -d -v time > logcat.txt              # зберегти
-# шукати: FATAL EXCEPTION / AndroidRuntime / com.ioi.youtube
-grep -E "FATAL|AndroidRuntime|com.ioi.youtube" logcat.txt
+adb logcat -d -s IOITube                        # ← справжнiй стектрейс помилки
+adb logcat -d -v time > logcat.txt              # повний лог
+grep -E "FATAL|AndroidRuntime|IOITube" logcat.txt
+```
+
+Швидка перевiрка самої апки без телефону (потрiбна мережа):
+
+```bash
+IOITUBE_LIVE_TESTS=1 ./gradlew :app:testDebugUnitTest --tests "*SmokeTest*"
+# очiкувано: live ok: feed=…, search=…, stream=…, comments=…
 ```
 
 Плюс: модель телефона, версія Android, який APK (release чи debug), і номер сценарію з таблиці.

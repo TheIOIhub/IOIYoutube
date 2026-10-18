@@ -15,8 +15,9 @@
 - `Downloader` — абстрактний клас; реалізуємо `execute(request: Request)`.
 - `Request`: `url()`, `httpMethod()`, `headers(): Map<String, List<String>>`, `dataToSend(): ByteArray?`.
 - `Response(responseCode: Int, responseMessage: String, responseHeaders: Map<String, List<String>>, responseBody: String, latestUrl: String)`.
-- Ліва стрічка: `NewPipe.getService(ServiceList.YouTube.serviceId).kioskList.getDefaultKioskExtractor().getInitialPage().items`.
-- Пошук: `NewPipe.getService(ServiceList.YouTube.serviceId).getSearchExtractor(query).getInitialPage().items`.
+- Ліва стрічка: `NewPipe.getService(ServiceList.YouTube.serviceId).kioskList.getDefaultKioskExtractor()` → **`fetchPage()`** → `initialPage.items`.
+- Пошук: `...getSearchExtractor(query)` → **`fetchPage()`** → `initialPage.items`.
+- ⚠️ NewPipe НЕ завантажує сторiнку сам: без `fetchPage()` `initialPage` падає з NPE (`responseData`/`initialData` null) i жодного HTTP-запиту не вiдбувається. Перевiрено на реальнiй мережi.
 - Деталі/потік: `StreamInfo.getInfo(watchUrl)` → `getName()`, `getUploaderName()`, `getUploaderAvatars()`, `getDescription()` (nullable `Description` → `.getContent()`), `getViewCount()` (**-1** = немає), `getLikeCount()` (**-1**), `getTextualUploadDate()`, `getThumbnails()`, `getDuration()` (**-1**), `getRelatedItems()`, `getVideoStreams()`.
 - Комментарі: `CommentsInfo.getInfo(watchUrl)` — **може повернути null**; `isCommentsDisabled()`.
 - `CommentsInfoItem`: `getCommentId()`, `getCommentText()` (`Description`), `getUploaderName()`, `getUploaderAvatars()`, `getTextualUploadDate()`, `getLikeCount()` (**int**, -1 = немає), `isHeartedByUploader()`, `isPinned()`.
@@ -605,18 +606,18 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         get() = NewPipe.getService(ServiceList.YouTube.serviceId)
 
     override suspend fun fetchHomeFeed(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
-        youtube.kioskList
-            .getDefaultKioskExtractor()
-            .getInitialPage()
-            .items
+        val extractor = youtube.kioskList.getDefaultKioskExtractor()
+        // NewPipe НЕ завантажує сторiнку сам: без fetchPage() initialPage падає з NPE.
+        extractor.fetchPage()
+        extractor.initialPage.items
             .filterIsInstance<StreamInfoItem>()
             .map { it.toRawSummary() }
     }
 
     override suspend fun search(query: String): List<RawVideoSummary> = withContext(Dispatchers.IO) {
-        youtube.getSearchExtractor(query)
-            .getInitialPage()
-            .items
+        val extractor = youtube.getSearchExtractor(query)
+        extractor.fetchPage()
+        extractor.initialPage.items
             .filterIsInstance<StreamInfoItem>()
             .map { it.toRawSummary() }
     }
@@ -713,37 +714,52 @@ Expected: `BUILD SUCCESSFUL`. Якщо Kotlin скаржиться на nullable
 package com.ioi.youtube.data.remote
 
 import com.ioi.youtube.data.extractor.ExtractorInitializer
+import com.ioi.youtube.data.extractor.OkHttpDownloader
+import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import org.schabi.newpipe.extractor.downloader.Downloader
-import org.schabi.newpipe.extractor.downloader.Request
-import org.schabi.newpipe.extractor.downloader.Response
-import kotlinx.coroutines.runBlocking
+import java.util.concurrent.TimeUnit
 
 class NewPipeRemoteDataSourceSmokeTest {
 
+    private val live = System.getenv("IOITUBE_LIVE_TESTS") == "1"
+
+    private fun client() = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build()
+
     @Test
-    fun `feed and search return data`() = runBlocking {
-        val initializer = ExtractorInitializer(object : Downloader() {
-            override fun execute(request: Request): Response =
-                Response(200, "OK", emptyMap(), "", request.url())
-        })
-        // Димний тест НЕ використовує мережевий downloader – NewPipe.ui потребує реальний.
-        // Реальну перевірку робимо тільки на пристрої (Task 2.12), тому тут пропускаємо.
-        assumeTrue(false)
-        initializer.init()
+    fun `feed search stream details and comments return data`() = runBlocking {
+        assumeTrue("IOITUBE_LIVE_TESTS=1 не встановлено — живий тест пропущено", live)
+
+        ExtractorInitializer(OkHttpDownloader(client())).init()
         val dataSource = NewPipeRemoteDataSource()
+
         val feed = dataSource.fetchHomeFeed()
         val search = dataSource.search("kotlin")
-        check(feed.isNotEmpty() || search.isNotEmpty())
-        println("feed=${feed.size}, search=${search.size}")
+        val stream = dataSource.fetchVideoStream("dQw4w9WgXcQ")
+        val details = dataSource.fetchVideoDetails("dQw4w9WgXcQ")
+        val comments = dataSource.fetchComments("dQw4w9WgXcQ")
+
+        check(feed.isNotEmpty() || search.isNotEmpty()) { "feed=${feed.size}, search=${search.size}" }
+        check(stream.url.isNotBlank()) { "stream url порожнiй" }
+        check(details.title.isNotBlank()) { "details title порожнiй" }
+        check(comments.isNotEmpty()) { "comments порожнi" }
+
+        println(
+            "live ok: feed=${feed.size}, search=${search.size}, " +
+                "stream=${stream.resolution}, comments=${comments.size}",
+        )
     }
 }
 ```
 
 Run: `./gradlew testDebugUnitTest --tests "com.ioi.youtube.data.remote.NewPipeRemoteDataSourceSmokeTest"`
 
-Expected: PASS зі статусом `skipped` (assumeTrue(false)) — тест навмисно не чіпає мережу в CI. Реальна перевірка — у Task 2.12 на пристрої.
+Expected: `BUILD SUCCESSFUL`, тест у статусi `skipped` (без `IOITUBE_LIVE_TESTS=1`).
+Живий прогiн (потрiбна мережа): `IOITUBE_LIVE_TESTS=1 ./gradlew :app:testDebugUnitTest --tests "*SmokeTest*"` → `live ok: feed=…, search=…, stream=…, comments=…`. Це єдиний тест, який реально б'є в YouTube.
 
 - [ ] **Step 5: Коміт**
 
