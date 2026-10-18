@@ -4,14 +4,19 @@ import com.ioi.youtube.data.model.RawComment
 import com.ioi.youtube.data.model.RawVideoDetails
 import com.ioi.youtube.data.model.RawVideoStream
 import com.ioi.youtube.data.model.RawVideoSummary
+import com.ioi.youtube.util.HtmlText
 import com.ioi.youtube.util.YouTubeUrlParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.StreamingService
 import org.schabi.newpipe.extractor.comments.CommentsInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfoItem
+import org.schabi.newpipe.extractor.stream.Description
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.VideoStream
@@ -28,19 +33,37 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
     private val youtube: StreamingService
         get() = NewPipe.getService(ServiceList.YouTube.serviceId)
 
+    /**
+     * Стрiчка «Головна».
+     *
+     * У NewPipeExtractor 0.26.5 (i в master) кiоск `Trending` зламаний: YouTube вiдповiдає
+     * HTTP 400 на browse-запит `FEtrending`, а анонiмна домашня стрiчка YouTube
+     * (`FEwhat_to_watch`) порожня за задумом. Тому стрiчку збираємо самi — паралельними
+     * пошуковими запитами за категорiями, чергуючи результати (щоб категорiї перемiшувались).
+     */
     override suspend fun fetchHomeFeed(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
-        val extractor = youtube.kioskList.getDefaultKioskExtractor()
-        // NewPipe НЕ завантажує сторiнку сам: без fetchPage() initialPage падає з NPE.
-        extractor.fetchPage()
-        extractor.initialPage.items
-            .filterIsInstance<StreamInfoItem>()
-            .map { it.toRawSummary() }
+        val pages = coroutineScope {
+            FEED_CATEGORIES.map { category ->
+                async { runCatching { searchPage(category) } }
+            }.awaitAll()
+        }
+        val loaded = pages.mapNotNull { it.getOrNull() }
+        if (loaded.isEmpty()) {
+            // Жодна категорiя не завантажилась — віддаємо помилку вгору (репозиторiй покаже її/кеш).
+            throw pages.firstNotNullOf { it.exceptionOrNull() }
+        }
+        loaded.interleave().distinctBy { it.id }.take(FEED_SIZE)
     }
 
     override suspend fun search(query: String): List<RawVideoSummary> = withContext(Dispatchers.IO) {
+        searchPage(query)
+    }
+
+    private fun searchPage(query: String): List<RawVideoSummary> {
         val extractor = youtube.getSearchExtractor(query)
+        // NewPipe НЕ завантажує сторiнку сам: без fetchPage() initialPage падає з NPE.
         extractor.fetchPage()
-        extractor.initialPage.items
+        return extractor.initialPage.items
             .filterIsInstance<StreamInfoItem>()
             .map { it.toRawSummary() }
     }
@@ -53,7 +76,7 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
                 title = info.name.orEmpty(),
                 uploaderName = info.uploaderName.orEmpty(),
                 uploaderAvatarUrl = info.uploaderAvatars.lastOrNull()?.url,
-                description = info.description?.content.orEmpty(),
+                description = info.description.asPlainText(),
                 viewCount = info.viewCount.orZero(),
                 likeCount = info.likeCount.orZero(),
                 uploadDate = info.textualUploadDate,
@@ -114,10 +137,38 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         id = commentId.orEmpty(),
         authorName = uploaderName.orEmpty(),
         authorAvatarUrl = uploaderAvatars.lastOrNull()?.url,
-        text = commentText.content,
+        text = commentText.asPlainText(),
         likeCount = if (likeCount >= 0) likeCount.toLong() else 0L,
         publishedTime = textualUploadDate,
         heartedByUploader = isHeartedByUploader,
         pinned = isPinned,
     )
+
+    /** NewPipe вiддає опис/коментар як HTML — для UI потрiбен звичайнiй текст. */
+    private fun Description?.asPlainText(): String = when {
+        this == null -> ""
+        type == Description.HTML -> HtmlText.toPlainText(content.orEmpty())
+        else -> content.orEmpty()
+    }
+
+    /** Чергує сторiнки категорiй, щоб у стрiчцi сусiднi вiдео були з рiзних категорiй. */
+    private fun List<List<RawVideoSummary>>.interleave(): List<RawVideoSummary> {
+        val merged = mutableListOf<RawVideoSummary>()
+        val longest = maxOfOrNull { it.size } ?: 0
+        for (index in 0 until longest) {
+            forEach { page -> page.getOrNull(index)?.let(merged::add) }
+        }
+        return merged
+    }
+
+    companion object {
+        /** Скільки вiдео показуємо на «Головнiй». */
+        internal const val FEED_SIZE = 30
+
+        /**
+         * Категорiї стрiчки (аналог YouTube Explore): кiоск Trending недоступний,
+         * тому кожна категорiя — окремий пошуковий запит.
+         */
+        internal val FEED_CATEGORIES = listOf("музика", "ігри", "спорт", "фільми", "технології")
+    }
 }

@@ -31,20 +31,32 @@ class NewPipeRemoteDataSourceSmokeTest {
         ExtractorInitializer(OkHttpDownloader(client())).init()
         val dataSource = NewPipeRemoteDataSource()
 
+        val feedStart = System.currentTimeMillis()
         val feed = dataSource.fetchHomeFeed()
+        val feedMillis = System.currentTimeMillis() - feedStart
+
         val search = dataSource.search("kotlin")
         val stream = dataSource.fetchVideoStream("dQw4w9WgXcQ")
         val details = dataSource.fetchVideoDetails("dQw4w9WgXcQ")
         val comments = dataSource.fetchComments("dQw4w9WgXcQ")
 
-        check(feed.isNotEmpty() || search.isNotEmpty()) { "feed=${feed.size}, search=${search.size}" }
+        check(feed.size >= 20) { "стрiчка замала: ${feed.size}" }
+        check(search.isNotEmpty()) { "пошук порожнiй" }
         check(stream.url.isNotBlank()) { "stream url порожнiй" }
         check(details.title.isNotBlank()) { "details title порожнiй" }
         check(comments.isNotEmpty()) { "comments порожнi" }
 
+        // YouTube вiддає опис/коментарi як HTML — у UI не має лишитись тегiв i сутностей.
+        check(!details.description.contains("<a href") && !details.description.contains("&amp;")) {
+            "опис не очищено вiд HTML: ${details.description.take(120)}"
+        }
+        val dirtyComment = comments.firstOrNull { it.text.contains("<a href") || it.text.contains("&apos;") }
+        check(dirtyComment == null) { "коментар не очищено вiд HTML: ${dirtyComment?.text?.take(120)}" }
+
         println(
-            "live ok: feed=${feed.size}, search=${search.size}, " +
+            "live ok: feed=${feed.size} (${feedMillis} ms), search=${search.size}, " +
                 "stream=${stream.resolution}, comments=${comments.size}",
         )
+        println("live feed sample: " + feed.take(6).joinToString(" | ") { it.title.take(40) })
     }
 }

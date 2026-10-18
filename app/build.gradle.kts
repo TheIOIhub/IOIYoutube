@@ -104,6 +104,9 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.github.teamnewpipe:NewPipeExtractor:0.26.5")
+    // Описи/коментарi YouTube приходять як HTML (теги + сутностi) — jsoup чистить їх.
+    // Версiя збiгається з транзитивною залежнiстю NewPipeExtractor.
+    implementation("org.jsoup:jsoup:1.22.2")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk:1.13.13")
