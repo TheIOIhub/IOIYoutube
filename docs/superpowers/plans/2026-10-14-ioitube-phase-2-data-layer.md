@@ -1719,6 +1719,7 @@ class SearchRepositoryImplTest {
         repository.search("   ").test {
             val success = awaitItem() as UiState.Success
             assertThat(success.data.videos).isEmpty()
+            assertThat(success.data.query).isEqualTo("")
             awaitComplete()
         }
 
@@ -1806,7 +1807,8 @@ class SearchRepositoryImpl @Inject constructor(
         emit(UiState.Loading)
         val trimmed = query.trim()
         if (trimmed.isEmpty()) {
-            emit(UiState.Success(SearchResults(query = query, videos = emptyList())))
+            // Пiнiнг: порожнiй запит вiддає саме "" (не сирий `query`), i без звернення до мережi.
+            emit(UiState.Success(SearchResults(query = "", videos = emptyList())))
             return@flow
         }
         val key = searchKey(trimmed)
