@@ -15,11 +15,16 @@
 - `Downloader` — абстрактний клас; реалізуємо `execute(request: Request)`.
 - `Request`: `url()`, `httpMethod()`, `headers(): Map<String, List<String>>`, `dataToSend(): ByteArray?`.
 - `Response(responseCode: Int, responseMessage: String, responseHeaders: Map<String, List<String>>, responseBody: String, latestUrl: String)`.
-- Ліва стрічка: `NewPipe.getService(ServiceList.YouTube.serviceId).kioskList.getDefaultKioskExtractor()` → **`fetchPage()`** → `initialPage.items`.
+- Стрiчка «Головна»: паралельнi пошуковi запити за категорiями (`FEED_CATEGORIES`), результати чергуються та дедуплiкуються. Кiоск недоступний:
+  - `kioskList.getDefaultKioskExtractor()` повертає кiоск `live` (самi прямi ефiри);
+  - кiоск `Trending` зламаний у самiй бiблiотецi (i в master): YouTube вiдповiдає **HTTP 400 `INVALID_ARGUMENT`** на browse-запит `FEtrending`;
+  - анонiмна домашня стрiчка YouTube (`browseId: FEwhat_to_watch`) порожня за задумом — вiддає лише банер «Your YouTube history is off»;
+  - новiшої версiї екстрактора немає: 0.26.5 (2026-08-15) — останнiй релiз. Перевiрено на реальнiй мережi 2026-10-18.
 - Пошук: `...getSearchExtractor(query)` → **`fetchPage()`** → `initialPage.items`.
 - ⚠️ NewPipe НЕ завантажує сторiнку сам: без `fetchPage()` `initialPage` падає з NPE (`responseData`/`initialData` null) i жодного HTTP-запиту не вiдбувається. Перевiрено на реальнiй мережi.
 - Деталі/потік: `StreamInfo.getInfo(watchUrl)` → `getName()`, `getUploaderName()`, `getUploaderAvatars()`, `getDescription()` (nullable `Description` → `.getContent()`), `getViewCount()` (**-1** = немає), `getLikeCount()` (**-1**), `getTextualUploadDate()`, `getThumbnails()`, `getDuration()` (**-1**), `getRelatedItems()`, `getVideoStreams()`.
 - Комментарі: `CommentsInfo.getInfo(watchUrl)` — **може повернути null**; `isCommentsDisabled()`.
+- Описи та коментарi приходять як HTML (`Description.type == HTML`): теги (`<a href>`, `<br>`) i сутностi (`&apos;`, `&amp;`) чистить `util/HtmlText.kt` (jsoup).
 - `CommentsInfoItem`: `getCommentId()`, `getCommentText()` (`Description`), `getUploaderName()`, `getUploaderAvatars()`, `getTextualUploadDate()`, `getLikeCount()` (**int**, -1 = немає), `isHeartedByUploader()`, `isPinned()`.
 - `StreamInfoItem`: `getName()`, `getUrl()`, `getUploaderName()`, `getTextualUploadDate()`, `getViewCount()` (**-1**), `getDuration()` (**-1**), `getThumbnails()` (з `InfoItem`).
 - `VideoStream`: `getUrl()`, `getResolution()` ("720p"), `getFormat()` ("MPEG-4"), `getBitrate()`, `isVideoOnly()`.
@@ -606,18 +611,23 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         get() = NewPipe.getService(ServiceList.YouTube.serviceId)
 
     override suspend fun fetchHomeFeed(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
-        val extractor = youtube.kioskList.getDefaultKioskExtractor()
-        // NewPipe НЕ завантажує сторiнку сам: без fetchPage() initialPage падає з NPE.
-        extractor.fetchPage()
-        extractor.initialPage.items
-            .filterIsInstance<StreamInfoItem>()
-            .map { it.toRawSummary() }
+        val pages = coroutineScope {
+            FEED_CATEGORIES.map { category -> async { runCatching { searchPage(category) } } }.awaitAll()
+        }
+        val loaded = pages.mapNotNull { it.getOrNull() }
+        if (loaded.isEmpty()) throw pages.firstNotNullOf { it.exceptionOrNull() }
+        loaded.interleave().distinctBy { it.id }.take(FEED_SIZE)
     }
 
     override suspend fun search(query: String): List<RawVideoSummary> = withContext(Dispatchers.IO) {
+        searchPage(query)
+    }
+
+    private fun searchPage(query: String): List<RawVideoSummary> {
         val extractor = youtube.getSearchExtractor(query)
+        // NewPipe НЕ завантажує сторiнку сам: без fetchPage() initialPage падає з NPE.
         extractor.fetchPage()
-        extractor.initialPage.items
+        return extractor.initialPage.items
             .filterIsInstance<StreamInfoItem>()
             .map { it.toRawSummary() }
     }
@@ -630,7 +640,7 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
                 title = info.name.orEmpty(),
                 uploaderName = info.uploaderName.orEmpty(),
                 uploaderAvatarUrl = info.uploaderAvatars.lastOrNull()?.url,
-                description = info.description?.content.orEmpty(),
+                description = info.description.asPlainText(),  // HTML -> текст
                 viewCount = info.viewCount.orZero(),
                 likeCount = info.likeCount.orZero(),
                 uploadDate = info.textualUploadDate,
@@ -691,7 +701,7 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         id = commentId.orEmpty(),
         authorName = uploaderName.orEmpty(),
         authorAvatarUrl = uploaderAvatars.lastOrNull()?.url,
-        text = commentText.content,
+        text = commentText.asPlainText(),
         likeCount = if (likeCount >= 0) likeCount.toLong() else 0L,
         publishedTime = textualUploadDate,
         heartedByUploader = isHeartedByUploader,
