@@ -24,7 +24,7 @@ class SearchRepositoryImpl @Inject constructor(
     override fun search(query: String): Flow<UiState<SearchResults>> = flow {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) {
-            emit(UiState.Success(SearchResults(query = query, videos = emptyList())))
+            emit(UiState.Success(SearchResults(query = "", videos = emptyList())))
             return@flow
         }
         emit(UiState.Loading)

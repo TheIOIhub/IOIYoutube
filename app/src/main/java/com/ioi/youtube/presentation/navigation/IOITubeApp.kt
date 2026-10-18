@@ -35,14 +35,14 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
                     NavigationBarItem(
                         selected = currentRoute == Routes.HOME,
                         onClick = { navController.navigateTopLevel(Routes.HOME) },
-                        icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
-                        label = { Text("Home") },
+                        icon = { Icon(Icons.Filled.Home, contentDescription = "Головна") },
+                        label = { Text("Головна") },
                     )
                     NavigationBarItem(
                         selected = currentRoute == Routes.SEARCH,
                         onClick = { navController.navigateTopLevel(Routes.SEARCH) },
-                        icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
-                        label = { Text("Search") },
+                        icon = { Icon(Icons.Filled.Search, contentDescription = "Пошук") },
+                        label = { Text("Пошук") },
                     )
                 }
             }
