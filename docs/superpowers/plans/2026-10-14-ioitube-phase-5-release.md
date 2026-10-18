@@ -264,7 +264,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.google.common.truth.Truth.assertThat
+import org.junit.Assert.assertEquals
 import com.ioi.youtube.domain.model.VideoSummary
 import com.ioi.youtube.presentation.theme.IOITubeTheme
 import org.junit.Rule
@@ -300,7 +300,7 @@ class VideoCardInstrumentedTest {
         composeRule.onNodeWithText("Instrumented Channel · 1.5K views · 1:01").assertExists()
         composeRule.onNodeWithText("Instrumented title").performClick()
 
-        assertThat(clicked).isEqualTo("dQw4w9WgXcQ")
+        assertEquals("dQw4w9WgXcQ", clicked)
     }
 }
 ```
@@ -309,7 +309,7 @@ class VideoCardInstrumentedTest {
 
 Run: `./gradlew testDebugUnitTest`
 
-Expected: `BUILD SUCCESSFUL`, усi тести Фаз 1–4 зеленi (ориєнтовно 60+).
+Expected: `BUILD SUCCESSFUL`, усi тести Фаз 1–4 зеленi (**85 tests, 0 failures, 1 skipped** — перевiрено контролером).
 
 - [ ] **Step 3: Debug-бiлд**
 
@@ -319,14 +319,16 @@ Expected: `BUILD SUCCESSFUL` + файл `app/build/outputs/apk/debug/app-debug.a
 
 - [ ] **Step 4: Iнструментальнi тести (тiльки з пiдключеним пристроєм/емулятором)**
 
-Run: `./gradlew connectedDebugAndroidTest`
+Run (з пристроєм): `./gradlew connectedDebugAndroidTest` → `BUILD SUCCESSFUL`.
 
-Expected: `BUILD SUCCESSFUL`. Якщо пристрою немає — пропусти крок, але залиш файл у репозиторiї.
+БЕЗ пристрою/емулятора (як у цьому середовищi) обов'язкова замiна — зiбрати androidTest-APK:
+`./gradlew :app:assembleDebugAndroidTest` → `BUILD SUCCESSFUL` + `app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk`.
+`connectedDebugAndroidTest` у такому разi ПРОПУСКАЄТЬСЯ (крок лишається для локальної перевiрки).
 
 - [ ] **Step 5: Коміт**
 
 ```bash
-git add -A
+git add app/src/androidTest/java/com/ioi/youtube/presentation/components/VideoCardInstrumentedTest.kt
 git commit -m "test: add instrumented video card test"
 ```
 
