@@ -66,6 +66,7 @@ class SearchRepositoryImplTest {
         repository.search("   ").test {
             val success = awaitItem() as UiState.Success
             assertThat(success.data.videos).isEmpty()
+            assertThat(success.data.query).isEqualTo("")
             awaitComplete()
         }
 
