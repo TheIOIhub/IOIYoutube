@@ -1,29 +1,50 @@
 package com.ioi.youtube.data.remote
 
 import com.ioi.youtube.data.extractor.ExtractorInitializer
+import com.ioi.youtube.data.extractor.OkHttpDownloader
+import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import org.schabi.newpipe.extractor.downloader.Downloader
-import org.schabi.newpipe.extractor.downloader.Request
-import org.schabi.newpipe.extractor.downloader.Response
-import kotlinx.coroutines.runBlocking
+import java.util.concurrent.TimeUnit
 
+/**
+ * Живий димний тест проти реального YouTube (мережа + робочий NewPipe Extractor).
+ * За замовчуванням ПРОПУСКАЄТЬСЯ, щоб звичайний прогiн був детермiнованим.
+ * Увiмкнути:
+ *
+ *   IOITUBE_LIVE_TESTS=1 ./gradlew :app:testDebugUnitTest --tests "*SmokeTest*"
+ */
 class NewPipeRemoteDataSourceSmokeTest {
 
+    private val live = System.getenv("IOITUBE_LIVE_TESTS") == "1"
+
+    private fun client() = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build()
+
     @Test
-    fun `feed and search return data`() = runBlocking {
-        val initializer = ExtractorInitializer(object : Downloader() {
-            override fun execute(request: Request): Response =
-                Response(200, "OK", emptyMap(), "", request.url())
-        })
-        // Димний тест НЕ використовує мережевий downloader – NewPipe.ui потребує реальний.
-        // Реальну перевірку робимо тільки на пристрої (Task 2.12), тому тут пропускаємо.
-        assumeTrue(false)
-        initializer.init()
+    fun `feed search stream details and comments return data`() = runBlocking {
+        assumeTrue("IOITUBE_LIVE_TESTS=1 не встановлено — живий тест пропущено", live)
+
+        ExtractorInitializer(OkHttpDownloader(client())).init()
         val dataSource = NewPipeRemoteDataSource()
+
         val feed = dataSource.fetchHomeFeed()
         val search = dataSource.search("kotlin")
-        check(feed.isNotEmpty() || search.isNotEmpty())
-        println("feed=${feed.size}, search=${search.size}")
+        val stream = dataSource.fetchVideoStream("dQw4w9WgXcQ")
+        val details = dataSource.fetchVideoDetails("dQw4w9WgXcQ")
+        val comments = dataSource.fetchComments("dQw4w9WgXcQ")
+
+        check(feed.isNotEmpty() || search.isNotEmpty()) { "feed=${feed.size}, search=${search.size}" }
+        check(stream.url.isNotBlank()) { "stream url порожнiй" }
+        check(details.title.isNotBlank()) { "details title порожнiй" }
+        check(comments.isNotEmpty()) { "comments порожнi" }
+
+        println(
+            "live ok: feed=${feed.size}, search=${search.size}, " +
+                "stream=${stream.resolution}, comments=${comments.size}",
+        )
     }
 }

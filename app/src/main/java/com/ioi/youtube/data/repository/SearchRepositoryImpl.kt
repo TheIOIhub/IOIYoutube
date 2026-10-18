@@ -1,5 +1,6 @@
 package com.ioi.youtube.data.repository
 
+import android.util.Log
 import com.ioi.youtube.data.local.CachedVideoDao
 import com.ioi.youtube.data.mapper.toDomain
 import com.ioi.youtube.data.mapper.toEntity
@@ -14,6 +15,9 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** Тег для logcat: фiльтр `adb logcat -s IOITube`. */
+private const val TAG = "IOITube"
 
 @Singleton
 class SearchRepositoryImpl @Inject constructor(
@@ -43,6 +47,7 @@ class SearchRepositoryImpl @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Log.e(TAG, "search request failed", e)
             if (cached.isEmpty()) emit(UiState.Error(ERROR_LOAD_SEARCH, e))
             return@flow
         }

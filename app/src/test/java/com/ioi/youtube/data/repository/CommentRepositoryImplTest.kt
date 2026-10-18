@@ -7,8 +7,14 @@ import com.ioi.youtube.domain.model.UiState
 import com.ioi.youtube.testutil.FakeRemoteDataSource
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.IOException
 
+// Robolectric потрiбен, бо репозиторiй пише в android.util.Log при помилцi мережi.
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class CommentRepositoryImplTest {
 
     private val remote = FakeRemoteDataSource()

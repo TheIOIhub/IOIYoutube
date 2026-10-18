@@ -29,18 +29,18 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         get() = NewPipe.getService(ServiceList.YouTube.serviceId)
 
     override suspend fun fetchHomeFeed(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
-        youtube.kioskList
-            .getDefaultKioskExtractor()
-            .getInitialPage()
-            .items
+        val extractor = youtube.kioskList.getDefaultKioskExtractor()
+        // NewPipe НЕ завантажує сторiнку сам: без fetchPage() initialPage падає з NPE.
+        extractor.fetchPage()
+        extractor.initialPage.items
             .filterIsInstance<StreamInfoItem>()
             .map { it.toRawSummary() }
     }
 
     override suspend fun search(query: String): List<RawVideoSummary> = withContext(Dispatchers.IO) {
-        youtube.getSearchExtractor(query)
-            .getInitialPage()
-            .items
+        val extractor = youtube.getSearchExtractor(query)
+        extractor.fetchPage()
+        extractor.initialPage.items
             .filterIsInstance<StreamInfoItem>()
             .map { it.toRawSummary() }
     }

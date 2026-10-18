@@ -1,5 +1,6 @@
 package com.ioi.youtube.data.repository
 
+import android.util.Log
 import com.ioi.youtube.data.local.CachedVideoDao
 import com.ioi.youtube.data.local.CachedVideoDetailsDao
 import com.ioi.youtube.data.mapper.toDetailsEntity
@@ -18,6 +19,9 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** Тег для logcat: фiльтр `adb logcat -s IOITube`. */
+private const val TAG = "IOITube"
 
 /**
  * Offline-first: спочатку кеш, потiм свiжi данi (спека §7).
@@ -41,6 +45,7 @@ class VideoRepositoryImpl @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Log.e(TAG, "home feed request failed", e)
             if (cached.isEmpty()) emit(UiState.Error(ERROR_LOAD_FEED, e))
             return@flow
         }
@@ -65,6 +70,7 @@ class VideoRepositoryImpl @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Log.e(TAG, "video details request failed", e)
             if (cached == null) emit(UiState.Error(ERROR_LOAD_DETAILS, e))
             return@flow
         }
@@ -81,6 +87,7 @@ class VideoRepositoryImpl @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Log.e(TAG, "video stream request failed", e)
             emit(UiState.Error(ERROR_LOAD_STREAM, e))
         }
     }.flowOn(Dispatchers.IO)
