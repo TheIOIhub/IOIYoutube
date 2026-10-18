@@ -359,7 +359,7 @@ keyPassword=CHANGE_ME
 
 - [ ] **Step 2: Онов `app/build.gradle.kts` двома точними правками**
 
-**Правка A** — одразу пiсля блоку `plugins { ... }` (перед `android {`) додай:
+**Правка A** — додай `import java.util.Properties` найпершим рядком файлу (НАД `plugins { ... }`; Kotlin DSL не iмпортує `java.util.*` автоматично), а одразу пiсля блоку `plugins { ... }` (перед `android {`) додай:
 
 ```kotlin
 val keystoreProperties = Properties().apply {
@@ -387,7 +387,7 @@ android {
     signingConfigs {
         create("release") {
             if (keystoreProperties.isNotEmpty()) {
-                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -398,7 +398,11 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.getByName("release")
+            // Без keystore.properties release лишається непiдписаним (порожнiй signing
+            // config не можна призначати — `packageRelease` його вiдхиляє).
+            if (keystoreProperties.isNotEmpty()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -437,6 +441,11 @@ android {
 # NewPipe Extractor — рефлексiя для сервiсiв
 -keep class org.schabi.newpipe.extractor.** { *; }
 -dontwarn org.schabi.newpipe.extractor.**
+
+# NewPipe Extractor / Rhino: java.beans + javax.script вiдсутнi на Android-класi
+# (лише рефлективнi посилання вбудованого JS-двигуна)
+-dontwarn java.beans.**
+-dontwarn javax.script.**
 
 # Media3 / ExoPlayer
 -keep class androidx.media3.** { *; }
@@ -509,7 +518,11 @@ keytool -genkey -v -keystore ioitube.jks -keyalg RSA -keysize 2048 -validity 100
 
 Run: `./gradlew :app:assembleRelease`
 
-Expected: `BUILD SUCCESSFUL` (поки `keystore.properties` вiдсутнiй — APK буде непiдписаним; це норма для перевiрки мiнiфiкацiї).
+Expected: `BUILD SUCCESSFUL` (поки `keystore.properties` вiдсутнiй — APK буде непiдписаним: `app/build/outputs/apk/release/app-release-unsigned.apk`; це норма для перевiрки мiнiфiкацiї).
+
+Наявнiсть `keystore.properties` + `ioitube.jks` у КОРЕНi репозиторiю — це шлях, який читає README/шаблон:
+`storeFile` резолвиться через `rootProject.file(...)`, тому `ioitube.jks` кладеться в корiнь, а не в `app/`.
+Перевiрка пiдпису: `./gradlew :app:assembleRelease` → `app-release.apk` (без суфiкса `-unsigned`) + `apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk`.
 
 - [ ] **Step 6: Ручне тестування (спека §8)**
 
@@ -532,7 +545,7 @@ Expected: `BUILD SUCCESSFUL` (поки `keystore.properties` вiдсутнiй �
 - [ ] **Step 7: Комміт**
 
 ```bash
-git add -A
+git add app/build.gradle.kts app/proguard-rules.pro keystore.properties.template README.md
 git commit -m "build: add release signing, proguard rules and readme"
 ```
 
