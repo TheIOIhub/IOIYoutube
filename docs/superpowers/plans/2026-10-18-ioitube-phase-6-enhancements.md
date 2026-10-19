@@ -795,6 +795,7 @@ git commit -m "feat: carry youtube hls manifest through data and domain layers"
 package com.ioi.youtube.presentation.player
 
 import com.google.common.truth.Truth.assertThat
+import java.util.Locale
 import org.junit.Test
 
 /** Чиста логіка без Android: голий JVM, без Robolectric. */
@@ -831,6 +832,18 @@ class QualityOptionsTest {
         assertThat(formatQualityLabel(1080, 4_334_157)).isEqualTo("1080p · 4.3 Мбіт/с")
         assertThat(formatQualityLabel(2160, 18_076_636)).isEqualTo("2160p · 18.1 Мбіт/с")
         assertThat(formatQualityLabel(360, 0)).isEqualTo("360p · —")
+        assertThat(formatQualityLabel(360, -1)).isEqualTo("360p · —")
+    }
+
+    @Test
+    fun `labels keep the us decimal separator under a comma locale`() {
+        val previous = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.GERMANY)
+            assertThat(formatQualityLabel(1080, 4_334_157)).isEqualTo("1080p · 4.3 Мбіт/с")
+        } finally {
+            Locale.setDefault(previous)
+        }
     }
 }
 ```
@@ -910,19 +923,6 @@ class QualityParametersTest {
         )
 
     @Test
-    fun `mime-less group counts as video only when it carries a height`() {
-        val tracks = tracks(
-            Format.Builder().setHeight(480).setAverageBitrate(500_000).build(),
-            Format.Builder().build(),
-        )
-
-        val infos = tracks.videoTrackInfos()
-
-        assertThat(infos.map { it.height }).containsExactly(480)
-        assertThat(infos.map { it.groupIndex }).containsExactly(0)
-    }
-
-    @Test
     fun `video track infos expose group and track indexes with height and bitrate`() {
         val tracks = tracks(
             videoFormat(1080, 4_300_000),
@@ -998,6 +998,26 @@ class QualityParametersTest {
     }
 
     @Test
+    fun `video track infos ignore audio groups`() {
+        val tracks = tracks(videoFormat(1080), audioFormat())
+
+        val infos = tracks.videoTrackInfos()
+
+        assertThat(infos.map { it.groupIndex }).containsExactly(0)
+        assertThat(infos.map { it.height }).containsExactly(1080)
+    }
+
+    @Test
+    fun `video track infos enumerate every track in a group`() {
+        val tracks = trackGroup(videoFormat(1080, 1_500_000), videoFormat(1080, 4_300_000))
+
+        val infos = tracks.videoTrackInfos()
+
+        assertThat(infos.map { it.trackIndex }).containsExactly(0, 1)
+        assertThat(infos.map { it.bitrate }).containsExactly(1_500_000, 4_300_000)
+    }
+
+    @Test
     fun `option pointing at a non-video group keeps parameters untouched`() {
         val player = playerWith(tracks(videoFormat(1080), audioFormat()))
 
@@ -1007,23 +1027,6 @@ class QualityParametersTest {
         )
 
         assertThat(actual).isEqualTo(player.trackSelectionParameters)
-    }
-
-    @Test
-    fun `option in a mime-less video group is applied`() {
-        val tracks = tracks(Format.Builder().setHeight(480).setAverageBitrate(500_000).build())
-        val player = playerWith(tracks)
-        val group = tracks.groups[0].mediaTrackGroup
-        val expected = player.trackSelectionParameters.buildUpon()
-            .setOverrideForType(TrackSelectionOverride(group, 0))
-            .build()
-
-        val actual = qualityParameters(
-            player,
-            QualityOption(groupIndex = 0, trackIndex = 0, height = 480, bitrate = 500_000),
-        )
-
-        assertThat(actual).isEqualTo(expected)
     }
 
     @Test
@@ -1104,29 +1107,25 @@ private fun formatBitrate(bitrate: Int): String = when {
     else -> "%.1f Мбіт/с".format(Locale.US, bitrate / 1_000_000.0)
 }
 
-/** Відеодоріжки зі стану плеєра (порядок груп зберігаємо — індекси йдуть у меню). */
+/**
+ * Відеодоріжки зі стану плеєра (порядок груп зберігаємо — індекси йдуть у меню).
+ *
+ * Лише групи з типом [C.TRACK_TYPE_VIDEO]: Media3 зберiгає override за типом
+ * групи, тож override для групи з типом UNKNOWN (mime невiдомий) нiколи не
+ * застосується — краще не показувати такий пункт, нiж показати й зробити
+ * його тихим no-op. Для HLS mime завжди є (з `CODECS`), тож меню не страждає.
+ */
 fun Tracks.videoTrackInfos(): List<VideoTrackInfo> =
     groups.flatMapIndexed { groupIndex, group ->
-        (0 until group.length).mapNotNull { trackIndex ->
-            val format = group.getTrackFormat(trackIndex)
-            if (!group.isVideoGroup(format)) {
-                return@mapNotNull null
+        if (group.type != C.TRACK_TYPE_VIDEO) {
+            emptyList()
+        } else {
+            (0 until group.length).map { trackIndex ->
+                val format = group.getTrackFormat(trackIndex)
+                VideoTrackInfo(groupIndex, trackIndex, format.height, format.bitrate)
             }
-            VideoTrackInfo(groupIndex, trackIndex, format.height, format.bitrate)
         }
     }
-
-/**
- * Тип групи Media3 виводить з mime-типу формату; коли mime невідомий
- * (у HLS буває без `CODECS`), лишається [C.TRACK_TYPE_UNKNOWN] — тоді
- * орієнтуємось на висоту кадру, якої в аудіо/текстових доріжок не буває.
- * Без цієї гілки такий манифест дав би порожнє меню якості.
- */
-private fun Tracks.Group.isVideoGroup(format: Format): Boolean = when (type) {
-    C.TRACK_TYPE_VIDEO -> true
-    C.TRACK_TYPE_UNKNOWN -> format.height > 0
-    else -> false
-}
 
 /** Новi параметри вибору дорiжок; `option == null` — «Авто» (адаптивно). */
 fun qualityParameters(player: Player, option: QualityOption?): TrackSelectionParameters {
@@ -1135,14 +1134,13 @@ fun qualityParameters(player: Player, option: QualityOption?): TrackSelectionPar
         return builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO).build()
     }
     val group = player.currentTracks.groups.getOrNull(option.groupIndex)
-    // Меню могло пережити змiну дорiжок: iндекс групи/дорiжки мiг застарiти.
-    // Тодi лишаємо параметри як є — краще грати як ранiше, нiж упасти на тапi.
+    // Меню могло пережити змiну дорiжок: iндекс групи/дорiжки мiг застарiти,
+    // а на цьому мiсцi тепер може бути не вiдео. Тодi лишаємо параметри як є —
+    // краще грати як ранiше, нiж упасти чи перемкнути аудiо.
     if (group == null || option.trackIndex !in 0 until group.length) {
         return player.trackSelectionParameters
     }
-    // Та сама перевiрка, що й у меню: iнакше пункт для групи без mime
-    // показувався б, але тап нiчого не робив.
-    if (!group.isVideoGroup(group.getTrackFormat(option.trackIndex))) {
+    if (group.type != C.TRACK_TYPE_VIDEO) {
         return player.trackSelectionParameters
     }
     return builder
@@ -1158,7 +1156,7 @@ Run:
 source .agent-env.sh && ./gradlew :app:testDebugUnitTest --tests "*QualityOptionsTest*" --tests "*QualityParametersTest*"
 ```
 
-Expected: `BUILD SUCCESSFUL`, 12 тестів пройдено (3 QualityOptionsTest + 9 QualityParametersTest).
+Expected: `BUILD SUCCESSFUL`, 13 тестів пройдено (4 QualityOptionsTest + 9 QualityParametersTest).
 
 Якщо `QualityParametersTest` падає саме на створенні `Tracks`/`TrackSelectionParameters` (не на логіці) — залишай Robolectric-анотацію, вона вже стоїть; знімати її не потрібно.
 
