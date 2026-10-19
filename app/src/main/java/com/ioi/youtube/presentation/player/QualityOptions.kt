@@ -75,6 +75,10 @@ fun qualityParameters(player: Player, option: QualityOption?): TrackSelectionPar
         return builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO).build()
     }
     val group = player.currentTracks.groups.getOrNull(option.groupIndex)?.mediaTrackGroup
-        ?: return player.trackSelectionParameters
+    // Меню могло пережити змiну дорiжок: iндекс групи/дорiжки мiг застарiти.
+    // Тодi лишаємо параметри як є — краще грати як ранiше, нiж упасти на тапi.
+    if (group == null || group.type != C.TRACK_TYPE_VIDEO || option.trackIndex !in 0 until group.length) {
+        return player.trackSelectionParameters
+    }
     return builder.setOverrideForType(TrackSelectionOverride(group, option.trackIndex)).build()
 }

@@ -32,10 +32,13 @@ class QualityParametersTest {
         return Tracks(groups)
     }
 
-    private fun playerWith(tracks: Tracks): Player {
+    private fun playerWith(
+        tracks: Tracks,
+        baseline: TrackSelectionParameters = TrackSelectionParameters.DEFAULT,
+    ): Player {
         val player = mockk<Player>(relaxed = true)
         every { player.currentTracks } returns tracks
-        every { player.trackSelectionParameters } returns TrackSelectionParameters.Builder().build()
+        every { player.trackSelectionParameters } returns baseline
         return player
     }
 
@@ -45,6 +48,22 @@ class QualityParametersTest {
             .setHeight(height)
             .setAverageBitrate(bitrate)
             .build()
+
+    private fun audioFormat(): Format =
+        Format.Builder().setSampleMimeType(MimeTypes.AUDIO_AAC).build()
+
+    /** Одна група з кiлькома дорiжками — щоб перевiрити, що `trackIndex` справдi вживається. */
+    private fun trackGroup(vararg formats: Format): Tracks =
+        Tracks(
+            listOf(
+                Tracks.Group(
+                    TrackGroup(*formats),
+                    /* adaptiveSupported= */ true,
+                    /* trackSupport= */ IntArray(formats.size) { C.FORMAT_HANDLED },
+                    /* trackSelected= */ BooleanArray(formats.size) { true },
+                ),
+            ),
+        )
 
     @Test
     fun `mime-less group counts as video only when it carries a height`() {
@@ -75,10 +94,17 @@ class QualityParametersTest {
     }
 
     @Test
-    fun `auto clears the video override`() {
-        val player = playerWith(tracks(videoFormat(1080)))
+    fun `auto clears the video override and keeps the audio one`() {
+        val tracks = tracks(videoFormat(1080), audioFormat())
+        val videoGroup = tracks.groups[0].mediaTrackGroup
+        val audioGroup = tracks.groups[1].mediaTrackGroup
+        val baseline = TrackSelectionParameters.DEFAULT.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(videoGroup, 0))
+            .setOverrideForType(TrackSelectionOverride(audioGroup, 0))
+            .build()
+        val player = playerWith(tracks, baseline)
 
-        val expected = player.trackSelectionParameters.buildUpon()
+        val expected = baseline.buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
             .build()
 
@@ -113,5 +139,46 @@ class QualityParametersTest {
         )
 
         assertThat(actual).isEqualTo(player.trackSelectionParameters)
+    }
+
+    @Test
+    fun `stale option with an out-of-range track index keeps parameters untouched`() {
+        val player = playerWith(tracks(videoFormat(1080)))
+
+        val actual = qualityParameters(
+            player,
+            QualityOption(groupIndex = 0, trackIndex = 5, height = 1080, bitrate = 4_300_000),
+        )
+
+        assertThat(actual).isEqualTo(player.trackSelectionParameters)
+    }
+
+    @Test
+    fun `option pointing at a non-video group keeps parameters untouched`() {
+        val player = playerWith(tracks(videoFormat(1080), audioFormat()))
+
+        val actual = qualityParameters(
+            player,
+            QualityOption(groupIndex = 1, trackIndex = 0, height = 720, bitrate = 1_058_000),
+        )
+
+        assertThat(actual).isEqualTo(player.trackSelectionParameters)
+    }
+
+    @Test
+    fun `explicit option uses the given track index`() {
+        val tracks = trackGroup(videoFormat(1080, 1_500_000), videoFormat(1080, 4_300_000))
+        val player = playerWith(tracks)
+        val group = tracks.groups[0].mediaTrackGroup
+        val expected = player.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(group, 1))
+            .build()
+
+        val actual = qualityParameters(
+            player,
+            QualityOption(groupIndex = 0, trackIndex = 1, height = 1080, bitrate = 4_300_000),
+        )
+
+        assertThat(actual).isEqualTo(expected)
     }
 }

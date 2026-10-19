@@ -36,5 +36,6 @@ class QualityOptionsTest {
         assertThat(formatQualityLabel(360, 444_226)).isEqualTo("360p · 444 Кбіт/с")
         assertThat(formatQualityLabel(1080, 4_334_157)).isEqualTo("1080p · 4.3 Мбіт/с")
         assertThat(formatQualityLabel(2160, 18_076_636)).isEqualTo("2160p · 18.1 Мбіт/с")
+        assertThat(formatQualityLabel(360, 0)).isEqualTo("360p · —")
     }
 }
