@@ -133,8 +133,8 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         }
         val loaded = pages.mapNotNull { it.getOrNull() }
         if (loaded.isEmpty()) {
-            val failure = pages.firstNotNullOfOrNull { it.exceptionOrNull() } ?: return emptyList()
-            throw failure
+            // Жоден канал не завантажився — віддаємо помилку вгору, як у fetchHomeFeed.
+            throw pages.firstNotNullOf { it.exceptionOrNull() }
         }
         return loaded.flatten().distinctBy { it.id }.shuffled()
     }
@@ -143,7 +143,9 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
     private fun shortsOfChannel(channelUrl: String): List<RawVideoSummary> {
         val channel = youtube.getChannelExtractor(channelUrl)
         channel.fetchPage()
-        val shortsTab = channel.tabs.firstOrNull { it.url.orEmpty().contains(SHORTS_TAB_MARKER) }
+        val shortsTab = channel.tabs.firstOrNull {
+            it.url.orEmpty().trimEnd('/').endsWith(SHORTS_TAB_MARKER)
+        }
             ?: return emptyList()
         val tabExtractor = youtube.getChannelTabExtractor(shortsTab)
         tabExtractor.fetchPage()

@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import io.mockk.slot
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import io.mockk.verifyOrder
@@ -333,6 +334,69 @@ class NewPipeRemoteDataSourceTest {
         val shorts = NewPipeRemoteDataSource().fetchMoreShorts()
 
         assertThat(shorts.map { it.id }).containsExactly("ttttttttttt")
-        verify(exactly = 1) { service.getSearchExtractor(any<String>()) }
+        val query = slot<String>()
+        verify(exactly = 1) { service.getSearchExtractor(capture(query)) }
+        assertThat(query.captured).isIn(NewPipeRemoteDataSource.SHORTS_QUERIES)
+    }
+
+    @Test
+    fun `a failing channel does not hide the shorts of the others`() = runTest {
+        val failing = mockk<ChannelExtractor>(relaxed = true)
+        every { failing.fetchPage() } throws IOException("offline")
+        val tab = shortsTab(
+            listOf(item("sssssssssss", "Short").apply { isShortFormContent = true }),
+        )
+        val working = channelExtractor("https://www.youtube.com/UC2/shorts")
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns searchExtractor(
+            listOf(
+                homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC1"),
+                homeItem("iiiiiiiiiii", "https://www.youtube.com/UC2"),
+            ),
+        )
+        every { service.getChannelExtractor("https://www.youtube.com/UC1") } returns failing
+        every { service.getChannelExtractor("https://www.youtube.com/UC2") } returns working
+        every { service.getChannelTabExtractor(any()) } returns tab
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource().fetchShorts()
+
+        assertThat(shorts.map { it.id }).containsExactly("sssssssssss")
+    }
+
+    @Test
+    fun `the same short from two channels is kept once`() = runTest {
+        val tab = shortsTab(
+            listOf(item("sssssssssss", "Short").apply { isShortFormContent = true }),
+        )
+        val channel = channelExtractor("https://www.youtube.com/UC1/shorts")
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns searchExtractor(
+            listOf(
+                homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC1"),
+                homeItem("iiiiiiiiiii", "https://www.youtube.com/UC2"),
+            ),
+        )
+        every { service.getChannelExtractor(any<String>()) } returns channel
+        every { service.getChannelTabExtractor(any()) } returns tab
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource().fetchShorts()
+
+        assertThat(shorts).hasSize(1)
+        assertThat(shorts.map { it.id }).containsExactly("sssssssssss")
+    }
+
+    @Test
+    fun `home feed without channel urls yields no shorts`() = runTest {
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns
+            searchExtractor(listOf(item("hhhhhhhhhhh", "No channel")))
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource().fetchShorts()
+
+        assertThat(shorts).isEmpty()
+        verify(exactly = 0) { service.getChannelExtractor(any<String>()) }
     }
 }
