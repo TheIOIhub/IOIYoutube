@@ -33,6 +33,17 @@ class IOITubeBottomBarTest {
         composeRule.onNodeWithText("Пошук").assertDoesNotExist()
     }
 
+
+    @Test
+    fun `shorts tab is present`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                IOITubeBottomBar(currentRoute = Routes.SHORTS, onNavigate = {})
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Shorts").assertExists()
+    }
     @Test
     fun `tapping an icon reports its route`() {
         var navigated: String? = null

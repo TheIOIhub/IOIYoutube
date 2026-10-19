@@ -18,6 +18,8 @@ class OrientationTest {
             .isEqualTo(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
         assertThat(orientationForRoute(Routes.SEARCH))
             .isEqualTo(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+        assertThat(orientationForRoute(Routes.SHORTS))
+            .isEqualTo(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
         assertThat(orientationForRoute(null))
             .isEqualTo(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
     }

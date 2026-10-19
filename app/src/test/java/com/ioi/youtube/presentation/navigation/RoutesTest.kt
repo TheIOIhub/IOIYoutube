@@ -16,6 +16,11 @@ class RoutesTest {
     }
 
     @Test
+    fun `shorts route`() {
+        assertThat(Routes.SHORTS).isEqualTo("shorts")
+    }
+
+    @Test
     fun `player route template`() {
         assertThat(Routes.PLAYER).isEqualTo("player/{videoId}")
     }

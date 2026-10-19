@@ -17,13 +17,16 @@ import androidx.navigation.compose.rememberNavController
 import com.ioi.youtube.presentation.home.HomeRoute
 import com.ioi.youtube.presentation.player.PlayerRoute
 import com.ioi.youtube.presentation.search.SearchRoute
+import com.ioi.youtube.presentation.shorts.ShortsRoute
 import com.ioi.youtube.presentation.util.findActivity
 
 @Composable
 fun IOITubeApp(navController: NavHostController = rememberNavController()) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showBottomBar = currentRoute == Routes.HOME || currentRoute == Routes.SEARCH
+    val showBottomBar = currentRoute == Routes.HOME ||
+        currentRoute == Routes.SEARCH ||
+        currentRoute == Routes.SHORTS
 
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -61,6 +64,9 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
                         navController.navigate(Routes.player(videoId))
                     },
                 )
+            }
+            composable(Routes.SHORTS) {
+                ShortsRoute()
             }
             composable(Routes.PLAYER) {
                 PlayerRoute(

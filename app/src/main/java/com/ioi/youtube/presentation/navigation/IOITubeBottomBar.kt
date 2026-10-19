@@ -3,6 +3,7 @@ package com.ioi.youtube.presentation.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -25,6 +26,11 @@ fun IOITubeBottomBar(
             selected = currentRoute == Routes.SEARCH,
             onClick = { onNavigate(Routes.SEARCH) },
             icon = { Icon(Icons.Filled.Search, contentDescription = "Пошук") },
+        )
+        NavigationBarItem(
+            selected = currentRoute == Routes.SHORTS,
+            onClick = { onNavigate(Routes.SHORTS) },
+            icon = { Icon(Icons.Filled.SmartDisplay, contentDescription = "Shorts") },
         )
     }
 }
