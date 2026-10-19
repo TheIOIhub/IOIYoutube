@@ -57,9 +57,10 @@ fun Tracks.videoTrackInfos(): List<VideoTrackInfo> =
     }
 
 /**
- * Тип групи Media3 виводить з mime-типу формату; коли mime відсутній
- * (напр. у тестових форматах), лишається [C.TRACK_TYPE_UNKNOWN] — тоді
+ * Тип групи Media3 виводить з mime-типу формату; коли mime невідомий
+ * (у HLS буває без `CODECS`), лишається [C.TRACK_TYPE_UNKNOWN] — тоді
  * орієнтуємось на висоту кадру, якої в аудіо/текстових доріжок не буває.
+ * Без цієї гілки такий манифест дав би порожнє меню якості.
  */
 private fun Tracks.Group.isVideoGroup(format: Format): Boolean = when (type) {
     C.TRACK_TYPE_VIDEO -> true

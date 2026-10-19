@@ -2,6 +2,7 @@ package com.ioi.youtube.presentation.player
 
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionOverride
@@ -38,11 +39,31 @@ class QualityParametersTest {
         return player
     }
 
+    private fun videoFormat(height: Int, bitrate: Int = Format.NO_VALUE): Format =
+        Format.Builder()
+            .setSampleMimeType(MimeTypes.VIDEO_H264)
+            .setHeight(height)
+            .setAverageBitrate(bitrate)
+            .build()
+
+    @Test
+    fun `mime-less group counts as video only when it carries a height`() {
+        val tracks = tracks(
+            Format.Builder().setHeight(480).setAverageBitrate(500_000).build(),
+            Format.Builder().build(),
+        )
+
+        val infos = tracks.videoTrackInfos()
+
+        assertThat(infos.map { it.height }).containsExactly(480)
+        assertThat(infos.map { it.groupIndex }).containsExactly(0)
+    }
+
     @Test
     fun `video track infos expose group and track indexes with height and bitrate`() {
         val tracks = tracks(
-            Format.Builder().setHeight(1080).setAverageBitrate(4_300_000).build(),
-            Format.Builder().setHeight(720).setAverageBitrate(1_058_000).build(),
+            videoFormat(1080, 4_300_000),
+            videoFormat(720, 1_058_000),
         )
 
         val infos = tracks.videoTrackInfos()
@@ -55,7 +76,7 @@ class QualityParametersTest {
 
     @Test
     fun `auto clears the video override`() {
-        val player = playerWith(tracks(Format.Builder().setHeight(1080).build()))
+        val player = playerWith(tracks(videoFormat(1080)))
 
         val expected = player.trackSelectionParameters.buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
@@ -68,8 +89,8 @@ class QualityParametersTest {
     fun `explicit option overrides exactly that track group`() {
         val player = playerWith(
             tracks(
-                Format.Builder().setHeight(1080).setAverageBitrate(4_300_000).build(),
-                Format.Builder().setHeight(720).setAverageBitrate(1_058_000).build(),
+                videoFormat(1080, 4_300_000),
+                videoFormat(720, 1_058_000),
             ),
         )
         val group = player.currentTracks.groups[1].mediaTrackGroup
@@ -84,7 +105,7 @@ class QualityParametersTest {
 
     @Test
     fun `option pointing outside the current tracks keeps parameters untouched`() {
-        val player = playerWith(tracks(Format.Builder().setHeight(1080).build()))
+        val player = playerWith(tracks(videoFormat(1080)))
 
         val actual = qualityParameters(
             player,
