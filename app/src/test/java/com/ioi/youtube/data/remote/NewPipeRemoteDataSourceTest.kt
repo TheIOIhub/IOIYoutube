@@ -15,8 +15,11 @@ import org.schabi.newpipe.extractor.ListExtractor
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.StreamingService
+import org.schabi.newpipe.extractor.channel.ChannelExtractor
+import org.schabi.newpipe.extractor.channel.tabs.ChannelTabExtractor
 import org.schabi.newpipe.extractor.comments.CommentsInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfoItem
+import org.schabi.newpipe.extractor.linkhandler.ListLinkHandler
 import org.schabi.newpipe.extractor.search.SearchExtractor
 import org.schabi.newpipe.extractor.stream.Description
 import org.schabi.newpipe.extractor.stream.StreamInfo
@@ -52,6 +55,27 @@ class NewPipeRemoteDataSourceTest {
             name,
             StreamType.VIDEO_STREAM,
         ).apply { thumbnails = emptyList() }
+
+    private fun linkHandler(url: String): ListLinkHandler {
+        val handler = mockk<ListLinkHandler>(relaxed = true)
+        every { handler.url } returns url
+        return handler
+    }
+
+    private fun homeItem(id: String, uploaderUrl: String): StreamInfoItem =
+        item(id, "Home $id").apply { this.uploaderUrl = uploaderUrl }
+
+    private fun channelExtractor(vararg tabUrls: String): ChannelExtractor {
+        val extractor = mockk<ChannelExtractor>(relaxed = true)
+        every { extractor.tabs } returns tabUrls.map(::linkHandler)
+        return extractor
+    }
+
+    private fun shortsTab(items: List<StreamInfoItem>): ChannelTabExtractor {
+        val extractor = mockk<ChannelTabExtractor>(relaxed = true)
+        every { extractor.initialPage } returns emptyPage(items)
+        return extractor
+    }
 
     private fun searchExtractor(
         items: List<StreamInfoItem> = emptyList(),
@@ -237,5 +261,78 @@ class NewPipeRemoteDataSourceTest {
         val stream = NewPipeRemoteDataSource().fetchVideoStream("dQw4w9WgXcQ")
 
         assertThat(stream.hlsUrl).isNull()
+    }
+
+    @Test
+    fun `shorts are collected from the shorts tabs of home feed channels`() = runTest {
+        val short = item("sssssssssss", "Short").apply { isShortFormContent = true }
+        val long = item("lllllllllll", "Long")
+        val tab = shortsTab(listOf(short, long))
+        val channel = channelExtractor(
+            "https://www.youtube.com/UC1/videos",
+            "https://www.youtube.com/UC1/shorts",
+        )
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns
+            searchExtractor(listOf(homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC1")))
+        every { service.getChannelExtractor("https://www.youtube.com/UC1") } returns channel
+        every { service.getChannelTabExtractor(any()) } returns tab
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource().fetchShorts()
+
+        assertThat(shorts.map { it.id }).containsExactly("sssssssssss")
+        verifyOrder { channel.fetchPage(); channel.tabs }
+        verifyOrder { tab.fetchPage(); tab.initialPage }
+    }
+
+    @Test
+    fun `channels without a shorts tab are skipped`() = runTest {
+        val channel = channelExtractor("https://www.youtube.com/UC1/videos")
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns
+            searchExtractor(listOf(homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC1")))
+        every { service.getChannelExtractor("https://www.youtube.com/UC1") } returns channel
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource().fetchShorts()
+
+        assertThat(shorts).isEmpty()
+        verify(exactly = 0) { service.getChannelTabExtractor(any()) }
+    }
+
+    @Test
+    fun `shorts feed reports failure when every channel fails`() = runTest {
+        val channel = mockk<ChannelExtractor>(relaxed = true)
+        every { channel.fetchPage() } throws IOException("offline")
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns
+            searchExtractor(listOf(homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC1")))
+        every { service.getChannelExtractor("https://www.youtube.com/UC1") } returns channel
+        stubYouTubeService(service)
+
+        val thrown = runCatching { NewPipeRemoteDataSource().fetchShorts() }.exceptionOrNull()
+
+        assertThat(thrown).isInstanceOf(IOException::class.java)
+        assertThat(thrown).hasMessageThat().isEqualTo("offline")
+    }
+
+    @Test
+    fun `more shorts are built from a topic search`() = runTest {
+        val tab = shortsTab(
+            listOf(item("ttttttttttt", "Topic short").apply { isShortFormContent = true }),
+        )
+        val channel = channelExtractor("https://www.youtube.com/UC2/shorts")
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns
+            searchExtractor(listOf(homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC2")))
+        every { service.getChannelExtractor("https://www.youtube.com/UC2") } returns channel
+        every { service.getChannelTabExtractor(any()) } returns tab
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource().fetchMoreShorts()
+
+        assertThat(shorts.map { it.id }).containsExactly("ttttttttttt")
+        verify(exactly = 1) { service.getSearchExtractor(any<String>()) }
     }
 }

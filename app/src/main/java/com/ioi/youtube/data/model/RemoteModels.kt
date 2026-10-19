@@ -12,6 +12,8 @@ data class RawVideoSummary(
     val durationSeconds: Long,
     val viewCount: Long,
     val uploadDate: String?,
+    /** URL каналу — потрiбен лише для стрiчки Shorts, у домен не йде. */
+    val uploaderUrl: String = "",
 )
 
 data class RawVideoDetails(

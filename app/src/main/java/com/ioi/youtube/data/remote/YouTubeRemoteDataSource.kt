@@ -16,4 +16,13 @@ interface YouTubeRemoteDataSource {
     suspend fun fetchVideoDetails(videoId: String): RawVideoDetails
     suspend fun fetchComments(videoId: String): List<RawComment>
     suspend fun fetchVideoStream(videoId: String): RawVideoStream
+
+    /**
+     * Стрiчка Shorts: у YouTube немає анонiмної стрiчки шортсiв, тому збираємо її
+     * з вкладок Shorts каналiв, якi трапились у стрiчцi «Головна».
+     */
+    suspend fun fetchShorts(): List<RawVideoSummary>
+
+    /** Ще шортси для «гортати далi»: канали з випадкової теми. */
+    suspend fun fetchMoreShorts(): List<RawVideoSummary>
 }

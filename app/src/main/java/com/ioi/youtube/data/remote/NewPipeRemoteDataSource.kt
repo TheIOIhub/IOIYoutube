@@ -112,6 +112,47 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
             )
         }
 
+    override suspend fun fetchShorts(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
+        shortsFromChannels(channelsFrom(fetchHomeFeed()))
+    }
+
+    override suspend fun fetchMoreShorts(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
+        // Iнша тема → iншi канали → iншi шортси: стрiчка не закiнчується.
+        shortsFromChannels(channelsFrom(search(SHORTS_QUERIES.random())))
+    }
+
+    private fun channelsFrom(videos: List<RawVideoSummary>): List<String> =
+        videos.mapNotNull { it.uploaderUrl.takeIf(String::isNotBlank) }
+            .distinct()
+            .take(SHORTS_CHANNEL_LIMIT)
+
+    private suspend fun shortsFromChannels(channels: List<String>): List<RawVideoSummary> {
+        if (channels.isEmpty()) return emptyList()
+        val pages = coroutineScope {
+            channels.map { channel -> async { runCatching { shortsOfChannel(channel) } } }.awaitAll()
+        }
+        val loaded = pages.mapNotNull { it.getOrNull() }
+        if (loaded.isEmpty()) {
+            val failure = pages.firstNotNullOfOrNull { it.exceptionOrNull() } ?: return emptyList()
+            throw failure
+        }
+        return loaded.flatten().distinctBy { it.id }.shuffled()
+    }
+
+    /** Вкладка Shorts каналу; канал без неї дає порожнiй список. */
+    private fun shortsOfChannel(channelUrl: String): List<RawVideoSummary> {
+        val channel = youtube.getChannelExtractor(channelUrl)
+        channel.fetchPage()
+        val shortsTab = channel.tabs.firstOrNull { it.url.orEmpty().contains(SHORTS_TAB_MARKER) }
+            ?: return emptyList()
+        val tabExtractor = youtube.getChannelTabExtractor(shortsTab)
+        tabExtractor.fetchPage()
+        return tabExtractor.initialPage.items
+            .filterIsInstance<StreamInfoItem>()
+            .filter { it.isShortFormContent }
+            .map { it.toRawSummary() }
+    }
+
     private fun pickBestVideoStream(info: StreamInfo): VideoStream {
         // Progressive-потоки (відео + аудіо в одному файлi) — ExoPlayer грає їх напряму.
         val candidates = info.videoStreams.filterNot { it.isVideoOnly }
@@ -134,6 +175,7 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         durationSeconds = duration.orZero(),
         viewCount = viewCount.orZero(),
         uploadDate = textualUploadDate,
+        uploaderUrl = uploaderUrl.orEmpty(),
     )
 
     private fun CommentsInfoItem.toRawComment() = RawComment(
@@ -173,5 +215,16 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
          * тому кожна категорiя — окремий пошуковий запит.
          */
         internal val FEED_CATEGORIES = listOf("музика", "ігри", "спорт", "фільми", "технології")
+
+        /** Скiльки каналiв тягнемо для стрiчки Shorts. */
+        internal const val SHORTS_CHANNEL_LIMIT = 6
+
+        /** Ознака вкладки Shorts у списку вкладок каналу. */
+        internal const val SHORTS_TAB_MARKER = "/shorts"
+
+        /** Теми для «гортати далi»: нова тема → новi канали → новi шортси. */
+        internal val SHORTS_QUERIES = listOf(
+            "музика", "гумор", "тварини", "спорт", "ігри", "кулінарія", "авто", "подорожі",
+        )
     }
 }

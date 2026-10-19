@@ -60,4 +60,26 @@ class FakeRemoteDataSource : YouTubeRemoteDataSource {
         streamError?.let { throw it }
         return requireNotNull(stream) { "FakeRemoteDataSource.stream is not set" }
     }
+
+    var shorts: List<RawVideoSummary> = emptyList()
+    var moreShorts: List<RawVideoSummary> = emptyList()
+    var shortsError: Exception? = null
+    var moreShortsError: Exception? = null
+
+    var shortsCalls = 0
+        private set
+    var moreShortsCalls = 0
+        private set
+
+    override suspend fun fetchShorts(): List<RawVideoSummary> {
+        shortsCalls++
+        shortsError?.let { throw it }
+        return shorts
+    }
+
+    override suspend fun fetchMoreShorts(): List<RawVideoSummary> {
+        moreShortsCalls++
+        moreShortsError?.let { throw it }
+        return moreShorts
+    }
 }
