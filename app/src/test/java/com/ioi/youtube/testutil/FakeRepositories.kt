@@ -7,6 +7,7 @@ import com.ioi.youtube.domain.model.VideoDetails
 import com.ioi.youtube.domain.model.VideoStream
 import com.ioi.youtube.domain.model.VideoSummary
 import com.ioi.youtube.domain.repository.CommentRepository
+import com.ioi.youtube.domain.repository.ShortsRepository
 import com.ioi.youtube.domain.repository.SearchRepository
 import com.ioi.youtube.domain.repository.VideoRepository
 import kotlinx.coroutines.flow.Flow
@@ -87,5 +88,34 @@ class FakeCommentRepository : CommentRepository {
     override fun getComments(videoId: String): Flow<UiState<List<Comment>>> {
         commentsCalls++
         return comments
+    }
+}
+
+class FakeShortsRepository : ShortsRepository {
+
+    private val shorts = MutableStateFlow<UiState<List<VideoSummary>>>(UiState.Loading)
+    private val moreShorts = MutableStateFlow<UiState<List<VideoSummary>>>(UiState.Loading)
+
+    var shortsCalls = 0
+        private set
+    var moreShortsCalls = 0
+        private set
+
+    fun setShorts(state: UiState<List<VideoSummary>>) {
+        shorts.value = state
+    }
+
+    fun setMoreShorts(state: UiState<List<VideoSummary>>) {
+        moreShorts.value = state
+    }
+
+    override fun getShorts(): Flow<UiState<List<VideoSummary>>> {
+        shortsCalls++
+        return shorts
+    }
+
+    override fun getMoreShorts(): Flow<UiState<List<VideoSummary>>> {
+        moreShortsCalls++
+        return moreShorts
     }
 }
