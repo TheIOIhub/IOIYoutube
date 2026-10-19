@@ -830,6 +830,7 @@ class QualityOptionsTest {
         assertThat(formatQualityLabel(360, 444_226)).isEqualTo("360p · 444 Кбіт/с")
         assertThat(formatQualityLabel(1080, 4_334_157)).isEqualTo("1080p · 4.3 Мбіт/с")
         assertThat(formatQualityLabel(2160, 18_076_636)).isEqualTo("2160p · 18.1 Мбіт/с")
+        assertThat(formatQualityLabel(360, 0)).isEqualTo("360p · —")
     }
 }
 ```
@@ -871,10 +872,13 @@ class QualityParametersTest {
         return Tracks(groups)
     }
 
-    private fun playerWith(tracks: Tracks): Player {
+    private fun playerWith(
+        tracks: Tracks,
+        baseline: TrackSelectionParameters = TrackSelectionParameters.DEFAULT,
+    ): Player {
         val player = mockk<Player>(relaxed = true)
         every { player.currentTracks } returns tracks
-        every { player.trackSelectionParameters } returns TrackSelectionParameters.Builder().build()
+        every { player.trackSelectionParameters } returns baseline
         return player
     }
 
@@ -884,6 +888,22 @@ class QualityParametersTest {
             .setHeight(height)
             .setAverageBitrate(bitrate)
             .build()
+
+    private fun audioFormat(): Format =
+        Format.Builder().setSampleMimeType(MimeTypes.AUDIO_AAC).build()
+
+    /** Одна група з кiлькома дорiжками — щоб перевiрити, що `trackIndex` справдi вживається. */
+    private fun trackGroup(vararg formats: Format): Tracks =
+        Tracks(
+            listOf(
+                Tracks.Group(
+                    TrackGroup(*formats),
+                    /* adaptiveSupported= */ true,
+                    /* trackSupport= */ IntArray(formats.size) { C.FORMAT_HANDLED },
+                    /* trackSelected= */ BooleanArray(formats.size) { true },
+                ),
+            ),
+        )
 
     @Test
     fun `mime-less group counts as video only when it carries a height`() {
@@ -914,10 +934,17 @@ class QualityParametersTest {
     }
 
     @Test
-    fun `auto clears the video override`() {
-        val player = playerWith(tracks(videoFormat(1080)))
+    fun `auto clears the video override and keeps the audio one`() {
+        val tracks = tracks(videoFormat(1080), audioFormat())
+        val videoGroup = tracks.groups[0].mediaTrackGroup
+        val audioGroup = tracks.groups[1].mediaTrackGroup
+        val baseline = TrackSelectionParameters.DEFAULT.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(videoGroup, 0))
+            .setOverrideForType(TrackSelectionOverride(audioGroup, 0))
+            .build()
+        val player = playerWith(tracks, baseline)
 
-        val expected = player.trackSelectionParameters.buildUpon()
+        val expected = baseline.buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
             .build()
 
@@ -952,6 +979,47 @@ class QualityParametersTest {
         )
 
         assertThat(actual).isEqualTo(player.trackSelectionParameters)
+    }
+
+    @Test
+    fun `stale option with an out-of-range track index keeps parameters untouched`() {
+        val player = playerWith(tracks(videoFormat(1080)))
+
+        val actual = qualityParameters(
+            player,
+            QualityOption(groupIndex = 0, trackIndex = 5, height = 1080, bitrate = 4_300_000),
+        )
+
+        assertThat(actual).isEqualTo(player.trackSelectionParameters)
+    }
+
+    @Test
+    fun `option pointing at a non-video group keeps parameters untouched`() {
+        val player = playerWith(tracks(videoFormat(1080), audioFormat()))
+
+        val actual = qualityParameters(
+            player,
+            QualityOption(groupIndex = 1, trackIndex = 0, height = 720, bitrate = 1_058_000),
+        )
+
+        assertThat(actual).isEqualTo(player.trackSelectionParameters)
+    }
+
+    @Test
+    fun `explicit option uses the given track index`() {
+        val tracks = trackGroup(videoFormat(1080, 1_500_000), videoFormat(1080, 4_300_000))
+        val player = playerWith(tracks)
+        val group = tracks.groups[0].mediaTrackGroup
+        val expected = player.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(group, 1))
+            .build()
+
+        val actual = qualityParameters(
+            player,
+            QualityOption(groupIndex = 0, trackIndex = 1, height = 1080, bitrate = 4_300_000),
+        )
+
+        assertThat(actual).isEqualTo(expected)
     }
 }
 ```
@@ -1046,7 +1114,11 @@ fun qualityParameters(player: Player, option: QualityOption?): TrackSelectionPar
         return builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO).build()
     }
     val group = player.currentTracks.groups.getOrNull(option.groupIndex)?.mediaTrackGroup
-        ?: return player.trackSelectionParameters
+    // Меню могло пережити змiну дорiжок: iндекс групи/дорiжки мiг застарiти.
+    // Тодi лишаємо параметри як є — краще грати як ранiше, нiж упасти на тапi.
+    if (group == null || group.type != C.TRACK_TYPE_VIDEO || option.trackIndex !in 0 until group.length) {
+        return player.trackSelectionParameters
+    }
     return builder.setOverrideForType(TrackSelectionOverride(group, option.trackIndex)).build()
 }
 ```
@@ -1058,7 +1130,7 @@ Run:
 source .agent-env.sh && ./gradlew :app:testDebugUnitTest --tests "*QualityOptionsTest*" --tests "*QualityParametersTest*"
 ```
 
-Expected: `BUILD SUCCESSFUL`, 8 тестів пройдено (3 QualityOptionsTest + 5 QualityParametersTest).
+Expected: `BUILD SUCCESSFUL`, 11 тестів пройдено (3 QualityOptionsTest + 8 QualityParametersTest).
 
 Якщо `QualityParametersTest` падає саме на створенні `Tracks`/`TrackSelectionParameters` (не на логіці) — залишай Robolectric-анотацію, вона вже стоїть; знімати її не потрібно.
 
