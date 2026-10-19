@@ -59,14 +59,6 @@ fun PlayerRoute(
         } else {
             controller.show(WindowInsetsCompat.Type.systemBars())
         }
-        // Вихiд iз повного екрана ставить портрет: iнакше на телефонi, який
-        // тримають боком, SENSOR одразу поверне ландшафт i вихід не спрацює.
-        // Щойно портрет застосувався — знову вмикаємо вільний поворот.
-        if (!isFullscreen &&
-            current.requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        ) {
-            current.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
-        }
     }
 
     DisposableEffect(activity) {
@@ -85,6 +77,11 @@ fun PlayerRoute(
         onRetry = viewModel::retry,
         isFullscreen = isFullscreen,
         onToggleFullscreen = {
+            // Вихiд ставить портрет i лишає його: автоматично повертати SENSOR
+            // не можна — на телефонi, який тримають боком, вiн одразу поверне
+            // ландшафт, i користувач знову опиниться в повному екранi.
+            // Вільний поворот повертається при наступному входi на екран вiдео
+            // (LaunchedEffect у IOITubeApp).
             activity?.requestedOrientation = if (isFullscreen) {
                 ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             } else {

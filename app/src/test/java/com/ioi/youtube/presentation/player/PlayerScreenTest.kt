@@ -178,6 +178,7 @@ class PlayerScreenTest {
 
         composeRule.onNodeWithText("Video dQw4w9WgXcQ").assertDoesNotExist()
         composeRule.onNodeWithText("Коментарі (1)").assertDoesNotExist()
+        composeRule.onNodeWithText("Рекомендації").assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertExists()
     }
 
