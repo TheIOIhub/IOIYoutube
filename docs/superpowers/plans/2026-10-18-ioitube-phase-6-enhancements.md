@@ -874,7 +874,7 @@ class QualityParametersTest {
 
     private fun playerWith(
         tracks: Tracks,
-        baseline: TrackSelectionParameters = TrackSelectionParameters.DEFAULT,
+        baseline: TrackSelectionParameters = TrackSelectionParameters.Builder().build(),
     ): Player {
         val player = mockk<Player>(relaxed = true)
         every { player.currentTracks } returns tracks
@@ -938,7 +938,7 @@ class QualityParametersTest {
         val tracks = tracks(videoFormat(1080), audioFormat())
         val videoGroup = tracks.groups[0].mediaTrackGroup
         val audioGroup = tracks.groups[1].mediaTrackGroup
-        val baseline = TrackSelectionParameters.DEFAULT.buildUpon()
+        val baseline = TrackSelectionParameters.Builder().build().buildUpon()
             .setOverrideForType(TrackSelectionOverride(videoGroup, 0))
             .setOverrideForType(TrackSelectionOverride(audioGroup, 0))
             .build()
@@ -1003,6 +1003,23 @@ class QualityParametersTest {
         )
 
         assertThat(actual).isEqualTo(player.trackSelectionParameters)
+    }
+
+    @Test
+    fun `option in a mime-less video group is applied`() {
+        val tracks = tracks(Format.Builder().setHeight(480).setAverageBitrate(500_000).build())
+        val player = playerWith(tracks)
+        val group = tracks.groups[0].mediaTrackGroup
+        val expected = player.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(group, 0))
+            .build()
+
+        val actual = qualityParameters(
+            player,
+            QualityOption(groupIndex = 0, trackIndex = 0, height = 480, bitrate = 500_000),
+        )
+
+        assertThat(actual).isEqualTo(expected)
     }
 
     @Test
@@ -1113,13 +1130,20 @@ fun qualityParameters(player: Player, option: QualityOption?): TrackSelectionPar
     if (option == null) {
         return builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO).build()
     }
-    val group = player.currentTracks.groups.getOrNull(option.groupIndex)?.mediaTrackGroup
+    val group = player.currentTracks.groups.getOrNull(option.groupIndex)
     // Меню могло пережити змiну дорiжок: iндекс групи/дорiжки мiг застарiти.
     // Тодi лишаємо параметри як є — краще грати як ранiше, нiж упасти на тапi.
-    if (group == null || group.type != C.TRACK_TYPE_VIDEO || option.trackIndex !in 0 until group.length) {
+    if (group == null || option.trackIndex !in 0 until group.length) {
         return player.trackSelectionParameters
     }
-    return builder.setOverrideForType(TrackSelectionOverride(group, option.trackIndex)).build()
+    // Та сама перевiрка, що й у меню: iнакше пункт для групи без mime
+    // показувався б, але тап нiчого не робив.
+    if (!group.isVideoGroup(group.getTrackFormat(option.trackIndex))) {
+        return player.trackSelectionParameters
+    }
+    return builder
+        .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, option.trackIndex))
+        .build()
 }
 ```
 
@@ -1130,7 +1154,7 @@ Run:
 source .agent-env.sh && ./gradlew :app:testDebugUnitTest --tests "*QualityOptionsTest*" --tests "*QualityParametersTest*"
 ```
 
-Expected: `BUILD SUCCESSFUL`, 11 тестів пройдено (3 QualityOptionsTest + 8 QualityParametersTest).
+Expected: `BUILD SUCCESSFUL`, 12 тестів пройдено (3 QualityOptionsTest + 9 QualityParametersTest).
 
 Якщо `QualityParametersTest` падає саме на створенні `Tracks`/`TrackSelectionParameters` (не на логіці) — залишай Robolectric-анотацію, вона вже стоїть; знімати її не потрібно.
 
