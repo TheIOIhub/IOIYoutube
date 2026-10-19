@@ -98,4 +98,16 @@ class VideoPlayerTest {
         composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertExists()
         composeRule.onNodeWithContentDescription("На весь екран").assertDoesNotExist()
     }
+
+    @Test
+    fun `unavailable fullscreen still offers the exit button`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                VideoPlayer(source = null, isFullscreen = true, onToggleFullscreen = {})
+            }
+        }
+
+        composeRule.onNodeWithText("Відео недоступне").assertExists()
+        composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertExists()
+    }
 }

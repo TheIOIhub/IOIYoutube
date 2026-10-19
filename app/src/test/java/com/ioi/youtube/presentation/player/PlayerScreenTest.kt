@@ -2,6 +2,7 @@ package com.ioi.youtube.presentation.player
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -149,5 +150,60 @@ class PlayerScreenTest {
         }
 
         composeRule.onNodeWithText("Відео недоступне").assertDoesNotExist()
+    }
+
+    @Test
+    fun `fullscreen renders only the player`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Success(
+                            VideoStream("https://example.com/v.mp4", "720p", "MPEG-4"),
+                        ),
+                        comments = UiState.Success(
+                            listOf(
+                                Comment("c1", "Alice", null, "First!", 150, "1 day ago", true, true),
+                            ),
+                        ),
+                    ),
+                    onVideoClick = {},
+                    onRetry = {},
+                    isFullscreen = true,
+                    onToggleFullscreen = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Video dQw4w9WgXcQ").assertDoesNotExist()
+        composeRule.onNodeWithText("Коментарі (1)").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertExists()
+    }
+
+    @Test
+    fun `fullscreen button reports the toggle`() {
+        var toggled = false
+
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Success(
+                            VideoStream("https://example.com/v.mp4", "720p", "MPEG-4"),
+                        ),
+                        comments = UiState.Success(emptyList()),
+                    ),
+                    onVideoClick = {},
+                    onRetry = {},
+                    onToggleFullscreen = { toggled = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("На весь екран").performClick()
+
+        assertThat(toggled).isTrue()
     }
 }

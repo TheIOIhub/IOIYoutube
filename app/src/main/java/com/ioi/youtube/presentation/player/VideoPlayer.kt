@@ -51,10 +51,37 @@ fun VideoPlayer(
 ) {
     if (source == null || source.url.isBlank()) {
         Box(
-            modifier = modifier.fillMaxWidth().aspectRatio(16f / 9f),
+            modifier = modifier.then(
+                if (isFullscreen) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                },
+            ),
             contentAlignment = Alignment.Center,
         ) {
             Text(text = unavailableText, style = MaterialTheme.typography.bodyLarge)
+
+            if (onToggleFullscreen != null) {
+                IconButton(
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    onClick = onToggleFullscreen,
+                ) {
+                    Icon(
+                        imageVector = if (isFullscreen) {
+                            Icons.Filled.FullscreenExit
+                        } else {
+                            Icons.Filled.Fullscreen
+                        },
+                        contentDescription = if (isFullscreen) {
+                            "Вийти з повного екрана"
+                        } else {
+                            "На весь екран"
+                        },
+                        tint = Color.White,
+                    )
+                }
+            }
         }
         return
     }
@@ -135,6 +162,8 @@ fun VideoPlayer(
                     keepScreenOn = true
                 }
             },
+            update = { view -> view.player = exoPlayer },
+            onRelease = { view -> view.player = null },
         )
 
         Row(
