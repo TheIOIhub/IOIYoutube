@@ -66,7 +66,7 @@ fun PlayerScreen(
             LazyColumn(modifier = modifier.fillMaxSize()) {
                 item(key = "player") {
                     VideoPlayer(
-                        videoUrl = (uiState.stream as? UiState.Success)?.data?.url,
+                        source = (uiState.stream as? UiState.Success)?.data.toPlayerSource(),
                     )
                 }
 

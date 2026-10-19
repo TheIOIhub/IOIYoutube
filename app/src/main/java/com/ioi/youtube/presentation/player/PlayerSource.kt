@@ -1,5 +1,7 @@
 package com.ioi.youtube.presentation.player
 
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import com.ioi.youtube.domain.model.VideoStream
 
 /** Що саме грає плеєр: HLS-манифест (усі якості) або progressive-потік. */
@@ -23,3 +25,10 @@ fun VideoStream?.toPlayerSource(): PlayerSource? {
         else -> null
     }
 }
+
+/** MediaItem для ExoPlayer: HLS-манифест вимагає явного MIME-типу (URL без розширення). */
+internal fun playerMediaItem(source: PlayerSource): MediaItem =
+    MediaItem.Builder()
+        .setUri(source.url)
+        .apply { if (source.isHls) setMimeType(MimeTypes.APPLICATION_M3U8) }
+        .build()
