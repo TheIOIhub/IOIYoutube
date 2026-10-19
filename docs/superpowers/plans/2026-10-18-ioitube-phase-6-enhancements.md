@@ -841,6 +841,7 @@ package com.ioi.youtube.presentation.player
 
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionOverride
@@ -877,11 +878,31 @@ class QualityParametersTest {
         return player
     }
 
+    private fun videoFormat(height: Int, bitrate: Int = Format.NO_VALUE): Format =
+        Format.Builder()
+            .setSampleMimeType(MimeTypes.VIDEO_H264)
+            .setHeight(height)
+            .setAverageBitrate(bitrate)
+            .build()
+
+    @Test
+    fun `mime-less group counts as video only when it carries a height`() {
+        val tracks = tracks(
+            Format.Builder().setHeight(480).setAverageBitrate(500_000).build(),
+            Format.Builder().build(),
+        )
+
+        val infos = tracks.videoTrackInfos()
+
+        assertThat(infos.map { it.height }).containsExactly(480)
+        assertThat(infos.map { it.groupIndex }).containsExactly(0)
+    }
+
     @Test
     fun `video track infos expose group and track indexes with height and bitrate`() {
         val tracks = tracks(
-            Format.Builder().setHeight(1080).setAverageBitrate(4_300_000).build(),
-            Format.Builder().setHeight(720).setAverageBitrate(1_058_000).build(),
+            videoFormat(1080, 4_300_000),
+            videoFormat(720, 1_058_000),
         )
 
         val infos = tracks.videoTrackInfos()
@@ -894,7 +915,7 @@ class QualityParametersTest {
 
     @Test
     fun `auto clears the video override`() {
-        val player = playerWith(tracks(Format.Builder().setHeight(1080).build()))
+        val player = playerWith(tracks(videoFormat(1080)))
 
         val expected = player.trackSelectionParameters.buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
@@ -907,8 +928,8 @@ class QualityParametersTest {
     fun `explicit option overrides exactly that track group`() {
         val player = playerWith(
             tracks(
-                Format.Builder().setHeight(1080).setAverageBitrate(4_300_000).build(),
-                Format.Builder().setHeight(720).setAverageBitrate(1_058_000).build(),
+                videoFormat(1080, 4_300_000),
+                videoFormat(720, 1_058_000),
             ),
         )
         val group = player.currentTracks.groups[1].mediaTrackGroup
@@ -923,7 +944,7 @@ class QualityParametersTest {
 
     @Test
     fun `option pointing outside the current tracks keeps parameters untouched`() {
-        val player = playerWith(tracks(Format.Builder().setHeight(1080).build()))
+        val player = playerWith(tracks(videoFormat(1080)))
 
         val actual = qualityParameters(
             player,
@@ -997,15 +1018,26 @@ private fun formatBitrate(bitrate: Int): String = when {
 /** Відеодоріжки зі стану плеєра (порядок груп зберігаємо — індекси йдуть у меню). */
 fun Tracks.videoTrackInfos(): List<VideoTrackInfo> =
     groups.flatMapIndexed { groupIndex, group ->
-        if (group.type != C.TRACK_TYPE_VIDEO) {
-            emptyList()
-        } else {
-            (0 until group.length).map { trackIndex ->
-                val format = group.getTrackFormat(trackIndex)
-                VideoTrackInfo(groupIndex, trackIndex, format.height, format.bitrate)
+        (0 until group.length).mapNotNull { trackIndex ->
+            val format = group.getTrackFormat(trackIndex)
+            if (!group.isVideoGroup(format)) {
+                return@mapNotNull null
             }
+            VideoTrackInfo(groupIndex, trackIndex, format.height, format.bitrate)
         }
     }
+
+/**
+ * Тип групи Media3 виводить з mime-типу формату; коли mime невідомий
+ * (у HLS буває без `CODECS`), лишається [C.TRACK_TYPE_UNKNOWN] — тоді
+ * орієнтуємось на висоту кадру, якої в аудіо/текстових доріжок не буває.
+ * Без цієї гілки такий манифест дав би порожнє меню якості.
+ */
+private fun Tracks.Group.isVideoGroup(format: Format): Boolean = when (type) {
+    C.TRACK_TYPE_VIDEO -> true
+    C.TRACK_TYPE_UNKNOWN -> format.height > 0
+    else -> false
+}
 
 /** Новi параметри вибору дорiжок; `option == null` — «Авто» (адаптивно). */
 fun qualityParameters(player: Player, option: QualityOption?): TrackSelectionParameters {
@@ -1026,7 +1058,7 @@ Run:
 source .agent-env.sh && ./gradlew :app:testDebugUnitTest --tests "*QualityOptionsTest*" --tests "*QualityParametersTest*"
 ```
 
-Expected: `BUILD SUCCESSFUL`, 7 тестів пройдено.
+Expected: `BUILD SUCCESSFUL`, 8 тестів пройдено (3 QualityOptionsTest + 5 QualityParametersTest).
 
 Якщо `QualityParametersTest` падає саме на створенні `Tracks`/`TrackSelectionParameters` (не на логіці) — залишай Robolectric-анотацію, вона вже стоїть; знімати її не потрібно.
 
