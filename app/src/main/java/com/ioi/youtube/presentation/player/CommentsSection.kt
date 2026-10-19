@@ -14,6 +14,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,8 +33,26 @@ fun CommentsSection(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val title = when (state) {
+        is UiState.Success -> "Коментарі (${state.data.size})"
+        else -> "Коментарі"
+    }
+
     Column(modifier = modifier.padding(12.dp)) {
-        Text(text = "Коментарі", style = MaterialTheme.typography.titleSmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(if (expanded) "Згорнути" else "Показати коментарі")
+            }
+        }
+
+        if (!expanded) return
+
         Spacer(modifier = Modifier.height(8.dp))
 
         when (state) {

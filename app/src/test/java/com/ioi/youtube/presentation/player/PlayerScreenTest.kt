@@ -70,7 +70,8 @@ class PlayerScreenTest {
         composeRule.onNodeWithText("Video dQw4w9WgXcQ").assertExists()
         composeRule.onNodeWithText("Test Channel").assertExists()
         composeRule.onNodeWithText("1.5M views", substring = true).assertExists()
-        composeRule.onNodeWithText("Коментарі").assertExists()
+        composeRule.onNodeWithText("Коментарі (1)").assertExists()
+        composeRule.onNodeWithText("Показати коментарі").performClick()
         composeRule.onNodeWithText("First!").assertExists()
         composeRule.onNodeWithText("Закріплено").assertExists()
 
@@ -123,7 +124,7 @@ class PlayerScreenTest {
         }
 
         composeRule.onNodeWithText("Не вдалося отримати відеопотік").assertExists()
-        // Коментарі тут у стані Loading, тож retry-кнопку дає лише StreamErrorRow — вона рівно одна.
+        // Коментарі тут у стані Loading і згорнуті, тож retry-кнопку дає лише StreamErrorRow —
         // onNodeWithText вимагає рівно одного вузла, що еквівалентно перевірці count == 1.
         composeRule.onNodeWithText("Спробувати знову").performClick()
         assertThat(retried).isTrue()
