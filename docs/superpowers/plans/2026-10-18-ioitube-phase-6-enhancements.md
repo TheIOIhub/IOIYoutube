@@ -316,11 +316,12 @@ class CommentsSectionTest {
 
         composeRule.onNodeWithText("Показати коментарі").performClick()
         composeRule.onNodeWithText("First!").assertExists()
-        composeRule.onNodeWithText("Згорнуто").assertDoesNotExist()
+        composeRule.onNodeWithText("Показати коментарі").assertDoesNotExist()
         composeRule.onNodeWithText("Згорнути").assertExists()
 
         composeRule.onNodeWithText("Згорнути").performClick()
         composeRule.onNodeWithText("First!").assertDoesNotExist()
+        composeRule.onNodeWithText("Показати коментарі").assertExists()
     }
 
     @Test
