@@ -1774,6 +1774,14 @@ fun PlayerRoute(
         } else {
             controller.show(WindowInsetsCompat.Type.systemBars())
         }
+        // Вихiд iз повного екрана ставить портрет: iнакше на телефонi, який
+        // тримають боком, SENSOR одразу поверне ландшафт i вихід не спрацює.
+        // Щойно портрет застосувався — знову вмикаємо вільний поворот.
+        if (!isFullscreen &&
+            current.requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        ) {
+            current.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+        }
     }
 
     DisposableEffect(activity) {
@@ -1793,7 +1801,7 @@ fun PlayerRoute(
         isFullscreen = isFullscreen,
         onToggleFullscreen = {
             activity?.requestedOrientation = if (isFullscreen) {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             } else {
                 ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             }
@@ -1873,13 +1881,79 @@ fun PlayerScreen(
 }
 ```
 
-- [ ] **Step 7: Запусти тести — мають пройти**
+- [ ] **Step 7: Дві правки в `VideoPlayer` (борг із Task 6.5)**
 
-Run: `source .agent-env.sh && ./gradlew :app:testDebugUnitTest --tests "*OrientationTest*" --tests "*PlayerScreenTest*"`
+`VideoPlayer.kt` — у `AndroidView` додай прив'язку плеєра до view, бо `factory` не виконується повторно, коли композиція вже має вузол:
 
-Expected: `BUILD SUCCESSFUL` (2 OrientationTest + 7 PlayerScreenTest).
+```kotlin
+            update = { view -> view.player = exoPlayer },
+            onRelease = { view -> view.player = null },
+```
 
-- [ ] **Step 8: Повний прогін і коміт**
+`VideoPlayer.kt` — у гілці «немає джерела» поверни кнопку повного екрана, інакше в ландшафті без вiдео користувач не має як вийти:
+
+```kotlin
+    if (source == null || source.url.isBlank()) {
+        Box(
+            modifier = modifier.then(
+                if (isFullscreen) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                },
+            ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = unavailableText, style = MaterialTheme.typography.bodyLarge)
+
+            if (onToggleFullscreen != null) {
+                IconButton(
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    onClick = onToggleFullscreen,
+                ) {
+                    Icon(
+                        imageVector = if (isFullscreen) {
+                            Icons.Filled.FullscreenExit
+                        } else {
+                            Icons.Filled.Fullscreen
+                        },
+                        contentDescription = if (isFullscreen) {
+                            "Вийти з повного екрана"
+                        } else {
+                            "На весь екран"
+                        },
+                        tint = Color.White,
+                    )
+                }
+            }
+        }
+        return
+    }
+```
+
+У `VideoPlayerTest.kt` додай тест:
+
+```kotlin
+    @Test
+    fun `unavailable fullscreen still offers the exit button`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                VideoPlayer(source = null, isFullscreen = true, onToggleFullscreen = {})
+            }
+        }
+
+        composeRule.onNodeWithText("Відео недоступне").assertExists()
+        composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertExists()
+    }
+```
+
+- [ ] **Step 8: Запусти тести — мають пройти**
+
+Run: `source .agent-env.sh && ./gradlew :app:testDebugUnitTest --tests "*OrientationTest*" --tests "*PlayerScreenTest*" --tests "*VideoPlayerTest*"`
+
+Expected: `BUILD SUCCESSFUL` (2 OrientationTest + 7 PlayerScreenTest + 7 VideoPlayerTest).
+
+- [ ] **Step 9: Повний прогін і коміт**
 
 Run:
 ```bash
