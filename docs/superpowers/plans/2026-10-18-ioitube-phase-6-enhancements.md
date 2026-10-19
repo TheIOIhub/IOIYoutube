@@ -1271,14 +1271,27 @@ class VideoPlayerTest {
     }
 
     @Test
-    fun `fullscreen button is hidden unless a callback is provided`() {
+    fun `fullscreen button is hidden without a callback`() {
         composeRule.setContent {
             IOITubeTheme {
-                VideoPlayer(source = progressive, onToggleFullscreen = {})
+                VideoPlayer(source = progressive)
             }
         }
 
-        composeRule.onNodeWithContentDescription("На весь екран").assertExists()
+        composeRule.onNodeWithContentDescription("На весь екран").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertDoesNotExist()
+    }
+
+    @Test
+    fun `fullscreen button is shown and reflects the state with a callback`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                VideoPlayer(source = progressive, isFullscreen = true, onToggleFullscreen = {})
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertExists()
+        composeRule.onNodeWithContentDescription("На весь екран").assertDoesNotExist()
     }
 }
 ```
@@ -1519,7 +1532,7 @@ fun VideoPlayer(
 
 Run: `source .agent-env.sh && ./gradlew :app:testDebugUnitTest --tests "*VideoPlayerTest*" --tests "*PlayerScreenTest*"`
 
-Expected: `BUILD SUCCESSFUL` (5 VideoPlayerTest + 5 PlayerScreenTest).
+Expected: `BUILD SUCCESSFUL` (6 VideoPlayerTest + 5 PlayerScreenTest).
 
 - [ ] **Step 7: Повний прогін і коміт**
 
@@ -1527,7 +1540,7 @@ Run:
 ```bash
 source .agent-env.sh && ./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
-Expected: `BUILD SUCCESSFUL`, без нових падінь. Саме на цьому кроці зʼявляється `media3-exoplayer-hls` у збірці — перевір, що `assembleDebug` не скаржиться на дублікати класів.
+Expected: `BUILD SUCCESSFUL`, без нових падінь. `media3-exoplayer-hls` уже доданий у Task 6.3 — перевір, що `assembleDebug` не скаржиться на дублікати класів.
 
 ```bash
 git add -A
