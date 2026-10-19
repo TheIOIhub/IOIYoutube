@@ -1,6 +1,7 @@
 package com.ioi.youtube.presentation.player
 
 import com.google.common.truth.Truth.assertThat
+import java.util.Locale
 import org.junit.Test
 
 /** Чиста логіка без Android: голий JVM, без Robolectric. */
@@ -37,5 +38,17 @@ class QualityOptionsTest {
         assertThat(formatQualityLabel(1080, 4_334_157)).isEqualTo("1080p · 4.3 Мбіт/с")
         assertThat(formatQualityLabel(2160, 18_076_636)).isEqualTo("2160p · 18.1 Мбіт/с")
         assertThat(formatQualityLabel(360, 0)).isEqualTo("360p · —")
+        assertThat(formatQualityLabel(360, -1)).isEqualTo("360p · —")
+    }
+
+    @Test
+    fun `labels keep the us decimal separator under a comma locale`() {
+        val previous = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.GERMANY)
+            assertThat(formatQualityLabel(1080, 4_334_157)).isEqualTo("1080p · 4.3 Мбіт/с")
+        } finally {
+            Locale.setDefault(previous)
+        }
     }
 }

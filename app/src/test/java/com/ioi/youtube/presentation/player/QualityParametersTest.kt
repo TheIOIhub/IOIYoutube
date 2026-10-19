@@ -70,19 +70,6 @@ class QualityParametersTest {
         )
 
     @Test
-    fun `mime-less group counts as video only when it carries a height`() {
-        val tracks = tracks(
-            Format.Builder().setHeight(480).setAverageBitrate(500_000).build(),
-            Format.Builder().build(),
-        )
-
-        val infos = tracks.videoTrackInfos()
-
-        assertThat(infos.map { it.height }).containsExactly(480)
-        assertThat(infos.map { it.groupIndex }).containsExactly(0)
-    }
-
-    @Test
     fun `video track infos expose group and track indexes with height and bitrate`() {
         val tracks = tracks(
             videoFormat(1080, 4_300_000),
@@ -158,6 +145,26 @@ class QualityParametersTest {
     }
 
     @Test
+    fun `video track infos ignore audio groups`() {
+        val tracks = tracks(videoFormat(1080), audioFormat())
+
+        val infos = tracks.videoTrackInfos()
+
+        assertThat(infos.map { it.groupIndex }).containsExactly(0)
+        assertThat(infos.map { it.height }).containsExactly(1080)
+    }
+
+    @Test
+    fun `video track infos enumerate every track in a group`() {
+        val tracks = trackGroup(videoFormat(1080, 1_500_000), videoFormat(1080, 4_300_000))
+
+        val infos = tracks.videoTrackInfos()
+
+        assertThat(infos.map { it.trackIndex }).containsExactly(0, 1)
+        assertThat(infos.map { it.bitrate }).containsExactly(1_500_000, 4_300_000)
+    }
+
+    @Test
     fun `option pointing at a non-video group keeps parameters untouched`() {
         val player = playerWith(tracks(videoFormat(1080), audioFormat()))
 
@@ -167,23 +174,6 @@ class QualityParametersTest {
         )
 
         assertThat(actual).isEqualTo(player.trackSelectionParameters)
-    }
-
-    @Test
-    fun `option in a mime-less video group is applied`() {
-        val tracks = tracks(Format.Builder().setHeight(480).setAverageBitrate(500_000).build())
-        val player = playerWith(tracks)
-        val group = tracks.groups[0].mediaTrackGroup
-        val expected = player.trackSelectionParameters.buildUpon()
-            .setOverrideForType(TrackSelectionOverride(group, 0))
-            .build()
-
-        val actual = qualityParameters(
-            player,
-            QualityOption(groupIndex = 0, trackIndex = 0, height = 480, bitrate = 500_000),
-        )
-
-        assertThat(actual).isEqualTo(expected)
     }
 
     @Test

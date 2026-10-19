@@ -1,7 +1,6 @@
 package com.ioi.youtube.presentation.player
 
 import androidx.media3.common.C
-import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.TrackSelectionParameters
@@ -44,29 +43,25 @@ private fun formatBitrate(bitrate: Int): String = when {
     else -> "%.1f Мбіт/с".format(Locale.US, bitrate / 1_000_000.0)
 }
 
-/** Відеодоріжки зі стану плеєра (порядок груп зберігаємо — індекси йдуть у меню). */
+/**
+ * Відеодоріжки зі стану плеєра (порядок груп зберігаємо — індекси йдуть у меню).
+ *
+ * Лише групи з типом [C.TRACK_TYPE_VIDEO]: Media3 зберiгає override за типом
+ * групи, тож override для групи з типом UNKNOWN (mime невiдомий) нiколи не
+ * застосується — краще не показувати такий пункт, нiж показати й зробити
+ * його тихим no-op. Для HLS mime завжди є (з `CODECS`), тож меню не страждає.
+ */
 fun Tracks.videoTrackInfos(): List<VideoTrackInfo> =
     groups.flatMapIndexed { groupIndex, group ->
-        (0 until group.length).mapNotNull { trackIndex ->
-            val format = group.getTrackFormat(trackIndex)
-            if (!group.isVideoGroup(format)) {
-                return@mapNotNull null
+        if (group.type != C.TRACK_TYPE_VIDEO) {
+            emptyList()
+        } else {
+            (0 until group.length).map { trackIndex ->
+                val format = group.getTrackFormat(trackIndex)
+                VideoTrackInfo(groupIndex, trackIndex, format.height, format.bitrate)
             }
-            VideoTrackInfo(groupIndex, trackIndex, format.height, format.bitrate)
         }
     }
-
-/**
- * Тип групи Media3 виводить з mime-типу формату; коли mime невідомий
- * (у HLS буває без `CODECS`), лишається [C.TRACK_TYPE_UNKNOWN] — тоді
- * орієнтуємось на висоту кадру, якої в аудіо/текстових доріжок не буває.
- * Без цієї гілки такий манифест дав би порожнє меню якості.
- */
-private fun Tracks.Group.isVideoGroup(format: Format): Boolean = when (type) {
-    C.TRACK_TYPE_VIDEO -> true
-    C.TRACK_TYPE_UNKNOWN -> format.height > 0
-    else -> false
-}
 
 /** Новi параметри вибору дорiжок; `option == null` — «Авто» (адаптивно). */
 fun qualityParameters(player: Player, option: QualityOption?): TrackSelectionParameters {
@@ -75,14 +70,13 @@ fun qualityParameters(player: Player, option: QualityOption?): TrackSelectionPar
         return builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO).build()
     }
     val group = player.currentTracks.groups.getOrNull(option.groupIndex)
-    // Меню могло пережити змiну дорiжок: iндекс групи/дорiжки мiг застарiти.
-    // Тодi лишаємо параметри як є — краще грати як ранiше, нiж упасти на тапi.
+    // Меню могло пережити змiну дорiжок: iндекс групи/дорiжки мiг застарiти,
+    // а на цьому мiсцi тепер може бути не вiдео. Тодi лишаємо параметри як є —
+    // краще грати як ранiше, нiж упасти чи перемкнути аудiо.
     if (group == null || option.trackIndex !in 0 until group.length) {
         return player.trackSelectionParameters
     }
-    // Та сама перевiрка, що й у меню: iнакше пункт для групи без mime
-    // показувався б, але тап нiчого не робив.
-    if (!group.isVideoGroup(group.getTrackFormat(option.trackIndex))) {
+    if (group.type != C.TRACK_TYPE_VIDEO) {
         return player.trackSelectionParameters
     }
     return builder
