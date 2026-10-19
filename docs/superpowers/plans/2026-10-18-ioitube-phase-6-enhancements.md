@@ -1973,7 +1973,7 @@ git commit -m "feat: rotate the video player and add fullscreen mode"
 - Modify: `app/src/main/java/com/ioi/youtube/data/remote/YouTubeRemoteDataSource.kt`
 - Modify: `app/src/main/java/com/ioi/youtube/data/remote/NewPipeRemoteDataSource.kt`
 - Modify: `app/src/test/java/com/ioi/youtube/testutil/FakeRemoteDataSource.kt`
-- Test: `app/src/test/java/com/ioi/youtube/data/remote/NewPipeRemoteDataSourceTest.kt` (+4 тести)
+- Test: `app/src/test/java/com/ioi/youtube/data/remote/NewPipeRemoteDataSourceTest.kt` (+7 тестів)
 
 **Interfaces:**
 - Consumes: `fetchHomeFeed()`, `search(query)`, `ChannelExtractor.getTabs()`, `StreamingService.getChannelTabExtractor(ListLinkHandler)`, `StreamInfoItem.isShortFormContent`.
@@ -1987,6 +1987,7 @@ git commit -m "feat: rotate the video player and add fullscreen mode"
 У `app/src/test/java/com/ioi/youtube/data/remote/NewPipeRemoteDataSourceTest.kt` додай імпорти:
 
 ```kotlin
+import io.mockk.slot
 import org.schabi.newpipe.extractor.channel.ChannelExtractor
 import org.schabi.newpipe.extractor.channel.tabs.ChannelTabExtractor
 import org.schabi.newpipe.extractor.linkhandler.ListLinkHandler
@@ -2017,7 +2018,7 @@ import org.schabi.newpipe.extractor.linkhandler.ListLinkHandler
     }
 ```
 
-і чотири тести в кінець класу:
+і сім тестів у кінець класу:
 
 ```kotlin
     @Test
@@ -2090,7 +2091,70 @@ import org.schabi.newpipe.extractor.linkhandler.ListLinkHandler
         val shorts = NewPipeRemoteDataSource().fetchMoreShorts()
 
         assertThat(shorts.map { it.id }).containsExactly("ttttttttttt")
-        verify(exactly = 1) { service.getSearchExtractor(any<String>()) }
+        val query = slot<String>()
+        verify(exactly = 1) { service.getSearchExtractor(capture(query)) }
+        assertThat(query.captured).isIn(NewPipeRemoteDataSource.SHORTS_QUERIES)
+    }
+
+    @Test
+    fun `a failing channel does not hide the shorts of the others`() = runTest {
+        val failing = mockk<ChannelExtractor>(relaxed = true)
+        every { failing.fetchPage() } throws IOException("offline")
+        val tab = shortsTab(
+            listOf(item("sssssssssss", "Short").apply { isShortFormContent = true }),
+        )
+        val working = channelExtractor("https://www.youtube.com/UC2/shorts")
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns searchExtractor(
+            listOf(
+                homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC1"),
+                homeItem("iiiiiiiiiii", "https://www.youtube.com/UC2"),
+            ),
+        )
+        every { service.getChannelExtractor("https://www.youtube.com/UC1") } returns failing
+        every { service.getChannelExtractor("https://www.youtube.com/UC2") } returns working
+        every { service.getChannelTabExtractor(any()) } returns tab
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource().fetchShorts()
+
+        assertThat(shorts.map { it.id }).containsExactly("sssssssssss")
+    }
+
+    @Test
+    fun `the same short from two channels is kept once`() = runTest {
+        val tab = shortsTab(
+            listOf(item("sssssssssss", "Short").apply { isShortFormContent = true }),
+        )
+        val channel = channelExtractor("https://www.youtube.com/UC1/shorts")
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns searchExtractor(
+            listOf(
+                homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC1"),
+                homeItem("iiiiiiiiiii", "https://www.youtube.com/UC2"),
+            ),
+        )
+        every { service.getChannelExtractor(any<String>()) } returns channel
+        every { service.getChannelTabExtractor(any()) } returns tab
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource().fetchShorts()
+
+        assertThat(shorts).hasSize(1)
+        assertThat(shorts.map { it.id }).containsExactly("sssssssssss")
+    }
+
+    @Test
+    fun `home feed without channel urls yields no shorts`() = runTest {
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns
+            searchExtractor(listOf(item("hhhhhhhhhhh", "No channel")))
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource().fetchShorts()
+
+        assertThat(shorts).isEmpty()
+        verify(exactly = 0) { service.getChannelExtractor(any<String>()) }
     }
 ```
 
@@ -2159,8 +2223,8 @@ data class RawVideoSummary(
         }
         val loaded = pages.mapNotNull { it.getOrNull() }
         if (loaded.isEmpty()) {
-            val failure = pages.firstNotNullOfOrNull { it.exceptionOrNull() } ?: return emptyList()
-            throw failure
+            // Жоден канал не завантажився — віддаємо помилку вгору, як у fetchHomeFeed.
+            throw pages.firstNotNullOf { it.exceptionOrNull() }
         }
         return loaded.flatten().distinctBy { it.id }.shuffled()
     }
@@ -2169,7 +2233,9 @@ data class RawVideoSummary(
     private fun shortsOfChannel(channelUrl: String): List<RawVideoSummary> {
         val channel = youtube.getChannelExtractor(channelUrl)
         channel.fetchPage()
-        val shortsTab = channel.tabs.firstOrNull { it.url.orEmpty().contains(SHORTS_TAB_MARKER) }
+        val shortsTab = channel.tabs.firstOrNull {
+            it.url.orEmpty().trimEnd('/').endsWith(SHORTS_TAB_MARKER)
+        }
             ?: return emptyList()
         val tabExtractor = youtube.getChannelTabExtractor(shortsTab)
         tabExtractor.fetchPage()
@@ -2240,7 +2306,7 @@ data class RawVideoSummary(
 
 Run: `source .agent-env.sh && ./gradlew :app:testDebugUnitTest --tests "*NewPipeRemoteDataSourceTest*"`
 
-Expected: `BUILD SUCCESSFUL` (11 тестів: 7 наявних + 4 нових).
+Expected: `BUILD SUCCESSFUL` (16 тестів: 9 наявних + 7 нових).
 
 - [ ] **Step 6: Повний прогін і коміт**
 
