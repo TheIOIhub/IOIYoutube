@@ -1,5 +1,6 @@
 package com.ioi.youtube.presentation.player
 
+import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
@@ -8,6 +9,7 @@ import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
@@ -19,6 +21,8 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class QualityParametersTest {
+
+    private val context = ApplicationProvider.getApplicationContext<Context>()
 
     private fun tracks(vararg formats: Format): Tracks {
         val groups = formats.map { format ->
@@ -34,7 +38,7 @@ class QualityParametersTest {
 
     private fun playerWith(
         tracks: Tracks,
-        baseline: TrackSelectionParameters = TrackSelectionParameters.DEFAULT,
+        baseline: TrackSelectionParameters = TrackSelectionParameters.Builder(context).build(),
     ): Player {
         val player = mockk<Player>(relaxed = true)
         every { player.currentTracks } returns tracks
@@ -98,7 +102,7 @@ class QualityParametersTest {
         val tracks = tracks(videoFormat(1080), audioFormat())
         val videoGroup = tracks.groups[0].mediaTrackGroup
         val audioGroup = tracks.groups[1].mediaTrackGroup
-        val baseline = TrackSelectionParameters.DEFAULT.buildUpon()
+        val baseline = TrackSelectionParameters.Builder(context).build().buildUpon()
             .setOverrideForType(TrackSelectionOverride(videoGroup, 0))
             .setOverrideForType(TrackSelectionOverride(audioGroup, 0))
             .build()
@@ -163,6 +167,23 @@ class QualityParametersTest {
         )
 
         assertThat(actual).isEqualTo(player.trackSelectionParameters)
+    }
+
+    @Test
+    fun `option in a mime-less video group is applied`() {
+        val tracks = tracks(Format.Builder().setHeight(480).setAverageBitrate(500_000).build())
+        val player = playerWith(tracks)
+        val group = tracks.groups[0].mediaTrackGroup
+        val expected = player.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(group, 0))
+            .build()
+
+        val actual = qualityParameters(
+            player,
+            QualityOption(groupIndex = 0, trackIndex = 0, height = 480, bitrate = 500_000),
+        )
+
+        assertThat(actual).isEqualTo(expected)
     }
 
     @Test

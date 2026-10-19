@@ -74,11 +74,18 @@ fun qualityParameters(player: Player, option: QualityOption?): TrackSelectionPar
     if (option == null) {
         return builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO).build()
     }
-    val group = player.currentTracks.groups.getOrNull(option.groupIndex)?.mediaTrackGroup
+    val group = player.currentTracks.groups.getOrNull(option.groupIndex)
     // Меню могло пережити змiну дорiжок: iндекс групи/дорiжки мiг застарiти.
     // Тодi лишаємо параметри як є — краще грати як ранiше, нiж упасти на тапi.
-    if (group == null || group.type != C.TRACK_TYPE_VIDEO || option.trackIndex !in 0 until group.length) {
+    if (group == null || option.trackIndex !in 0 until group.length) {
         return player.trackSelectionParameters
     }
-    return builder.setOverrideForType(TrackSelectionOverride(group, option.trackIndex)).build()
+    // Та сама перевiрка, що й у меню: iнакше пункт для групи без mime
+    // показувався б, але тап нiчого не робив.
+    if (!group.isVideoGroup(group.getTrackFormat(option.trackIndex))) {
+        return player.trackSelectionParameters
+    }
+    return builder
+        .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, option.trackIndex))
+        .build()
 }
