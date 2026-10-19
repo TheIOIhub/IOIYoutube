@@ -106,6 +106,9 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
                 url = stream.url.orEmpty(),
                 resolution = stream.resolution.orEmpty(),
                 format = stream.format?.name.orEmpty(),
+                // HLS дає всі якості (144p…1080p) і адаптивне перемикання;
+                // progressive лишається запасним варіантом.
+                hlsUrl = info.hlsUrl?.takeIf { it.isNotBlank() },
             )
         }
 

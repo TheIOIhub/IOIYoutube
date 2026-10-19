@@ -22,6 +22,7 @@ import org.schabi.newpipe.extractor.stream.Description
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.StreamType
+import org.schabi.newpipe.extractor.stream.VideoStream
 import java.io.IOException
 
 /**
@@ -67,6 +68,25 @@ class NewPipeRemoteDataSourceTest {
 
     private fun <T : InfoItem> emptyPage(items: List<T>): ListExtractor.InfoItemsPage<T> =
         ListExtractor.InfoItemsPage(items, null, emptyList())
+
+    /** NewPipe `VideoStream` не має публічного конструктора — тільки через ITag, тому мок. */
+    private fun videoStream(url: String, resolution: String): VideoStream {
+        val stream = mockk<VideoStream>(relaxed = true)
+        every { stream.url } returns url
+        // `resolution` та `isVideoOnly` — публічні final-поля: Kotlin читає їх напряму (getfield),
+        // тому MockK їх не перехоплює і `every { ... }` на них падає. Виставляємо рефлексією.
+        stream.setFinalField("resolution", resolution)
+        stream.setFinalField("isVideoOnly", false)
+        every { stream.bitrate } returns 100_000
+        return stream
+    }
+
+    private fun VideoStream.setFinalField(name: String, value: Any) {
+        VideoStream::class.java.getDeclaredField(name).apply {
+            isAccessible = true
+            set(this@setFinalField, value)
+        }
+    }
 
     @Test
     fun `home feed searches every category, fetches pages first and interleaves results`() = runTest {
@@ -187,5 +207,35 @@ class NewPipeRemoteDataSourceTest {
         val details = NewPipeRemoteDataSource().fetchVideoDetails("dQw4w9WgXcQ")
 
         assertThat(details.description).isEqualTo("a < b & c")
+    }
+
+    @Test
+    fun `video stream keeps the progressive url and adds the hls manifest`() = runTest {
+        val info = mockk<StreamInfo>(relaxed = true)
+        every { info.videoStreams } returns listOf(videoStream("https://p/360.mp4", "360p"))
+        every { info.hlsUrl } returns "https://manifest.googlevideo.com/hls_variant?x=1"
+        mockkStatic(StreamInfo::class)
+        every { StreamInfo.getInfo(any<String>()) } returns info
+        stubYouTubeService(mockk<StreamingService>(relaxed = true))
+
+        val stream = NewPipeRemoteDataSource().fetchVideoStream("dQw4w9WgXcQ")
+
+        assertThat(stream.url).isEqualTo("https://p/360.mp4")
+        assertThat(stream.resolution).isEqualTo("360p")
+        assertThat(stream.hlsUrl).isEqualTo("https://manifest.googlevideo.com/hls_variant?x=1")
+    }
+
+    @Test
+    fun `video stream without hls manifest leaves hls url null`() = runTest {
+        val info = mockk<StreamInfo>(relaxed = true)
+        every { info.videoStreams } returns listOf(videoStream("https://p/360.mp4", "360p"))
+        every { info.hlsUrl } returns null
+        mockkStatic(StreamInfo::class)
+        every { StreamInfo.getInfo(any<String>()) } returns info
+        stubYouTubeService(mockk<StreamingService>(relaxed = true))
+
+        val stream = NewPipeRemoteDataSource().fetchVideoStream("dQw4w9WgXcQ")
+
+        assertThat(stream.hlsUrl).isNull()
     }
 }

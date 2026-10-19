@@ -83,4 +83,18 @@ class RemoteMappersTest {
         assertThat(domain.resolution).isEqualTo("720p")
         assertThat(domain.format).isEqualTo("MPEG-4")
     }
+
+    @Test
+    fun `maps hls url to domain`() {
+        val raw = RawVideoStream(
+            url = "https://v/x",
+            resolution = "720p",
+            format = "MPEG-4",
+            hlsUrl = "https://manifest.example/hls_variant",
+        )
+
+        val domain = raw.toDomain()
+
+        assertThat(domain.hlsUrl).isEqualTo("https://manifest.example/hls_variant")
+    }
 }

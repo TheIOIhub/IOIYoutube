@@ -48,4 +48,5 @@ fun RawVideoStream.toDomain(): VideoStream = VideoStream(
     url = url,
     resolution = resolution,
     format = format,
+    hlsUrl = hlsUrl,
 )
