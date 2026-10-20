@@ -4,6 +4,7 @@ import com.ioi.youtube.data.extractor.ExtractorInitializer
 import com.ioi.youtube.data.extractor.OkHttpDownloader
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.util.concurrent.TimeUnit
@@ -58,5 +59,35 @@ class NewPipeRemoteDataSourceSmokeTest {
                 "stream=${stream.resolution}, comments=${comments.size}",
         )
         println("live feed sample: " + feed.take(6).joinToString(" | ") { it.title.take(40) })
+    }
+
+    @Test
+    fun `shorts feed and hls manifest are alive`() = runBlocking {
+        assumeTrue("IOITUBE_LIVE_TESTS=1 не встановлено — живий тест пропущено", live)
+
+        ExtractorInitializer(OkHttpDownloader(client())).init()
+        val dataSource = NewPipeRemoteDataSource()
+
+        val shortsStart = System.currentTimeMillis()
+        val shorts = dataSource.fetchShorts()
+        val shortsMillis = System.currentTimeMillis() - shortsStart
+
+        check(shorts.isNotEmpty()) { "стрiчка шортсiв порожня" }
+        val brokenId = shorts.firstOrNull { it.id.length != 11 }
+        check(brokenId == null) { "дивний id шортса: ${brokenId?.id}" }
+
+        val stream = dataSource.fetchVideoStream("dQw4w9WgXcQ")
+        val hlsUrl = stream.hlsUrl
+        check(!hlsUrl.isNullOrBlank()) { "HLS-манифест вiдсутнiй" }
+
+        val response = client().newCall(Request.Builder().url(hlsUrl).build()).execute()
+        val body = response.body?.string().orEmpty()
+        check(response.code == 200) { "HLS-манифест вiддав HTTP ${response.code}" }
+        check(body.contains("#EXTM3U")) { "HLS-манифест без #EXTM3U" }
+        val variants = body.lineSequence().count { it.contains("BANDWIDTH") }
+        check(variants >= 2) { "у манифестi лише $variants варiантiв якостi" }
+
+        println("live shorts: n=${shorts.size} (${shortsMillis} ms), hls variants=$variants")
+        println("live shorts sample: " + shorts.take(5).joinToString(" | ") { it.title.take(40) })
     }
 }
