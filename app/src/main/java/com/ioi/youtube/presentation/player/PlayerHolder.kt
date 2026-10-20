@@ -32,6 +32,12 @@ class PlayerHolder(
     private val appContext = context.applicationContext
     val player: ExoPlayer = ExoPlayer.Builder(context).build()
 
+    private val errorListener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            recover()
+        }
+    }
+
     private var stream: VideoStream? = null
     private var video: VideoVariant? = null
     private var audio: AudioTrackOption? = null
@@ -44,13 +50,7 @@ class PlayerHolder(
         private set
 
     init {
-        player.addListener(
-            object : Player.Listener {
-                override fun onPlayerError(error: PlaybackException) {
-                    recover()
-                }
-            },
-        )
+        player.addListener(errorListener)
     }
 
     /** Перше завантаження або зміна вибору; позиція зберігається. */
@@ -75,9 +75,17 @@ class PlayerHolder(
         apply(plan, if (loaded) player.currentPosition else 0L)
     }
 
+    /**
+     * Слухач з [init] знімається, а стан скидається: [release] має бути безпечним
+     * і після відключення екрана, інакше ExoPlayer дозвінимо `onPlayerError` на
+     * вільному плеєрі, який більше ніхто не оновлює.
+     */
     fun release() {
         if (released) return
         released = true
+        player.removeListener(errorListener)
+        currentPlan = null
+        loaded = false
         player.release()
     }
 
