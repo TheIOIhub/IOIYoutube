@@ -4,8 +4,16 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.ioi.youtube.domain.model.AudioTrackOption
+import com.ioi.youtube.domain.model.VideoStream
+import com.ioi.youtube.domain.model.VideoVariant
 import com.ioi.youtube.presentation.theme.IOITubeTheme
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -19,93 +27,133 @@ class VideoPlayerTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private val progressive = PlayerSource(
-        url = "https://example.com/v.mp4",
-        isHls = false,
-        fallbackUrl = null,
+    private lateinit var player: ExoPlayer
+
+    private val video = VideoVariant("https://v/1080.mp4", 1080, 2_000_000)
+    private val ukrainian = AudioTrackOption("uk.1", "Українська · дубляж", "uk", "https://a/uk", 128_000, false)
+    private val english = AudioTrackOption("en.1", "English · оригінал", "en", "https://a/en", 128_000, true)
+    private val stream = VideoStream(
+        url = "https://v/360.mp4",
+        resolution = "360p",
+        format = "MPEG-4",
+        hlsUrl = "https://hls",
+        videoOnly = listOf(video),
+        audioTracks = listOf(english, ukrainian),
     )
 
-    @Test
-    fun `missing source shows unavailable message instead of player`() {
+    @Before
+    fun setUp() {
+        player = ExoPlayer.Builder(ApplicationProvider.getApplicationContext()).build()
+    }
+
+    @After
+    fun tearDown() {
+        player.release()
+    }
+
+    private fun show(
+        stream: VideoStream? = this.stream,
+        player: ExoPlayer? = this.player,
+        audioOptions: List<AudioTrackOption> = this.stream.audioTracks,
+        onSelectAudio: (AudioTrackOption) -> Unit = {},
+        onScaleChange: (VideoScale) -> Unit = {},
+        selectedVideo: VideoVariant? = video,
+        selectedAudio: AudioTrackOption? = english,
+        isFullscreen: Boolean = false,
+        onToggleFullscreen: (() -> Unit)? = null,
+    ) {
         composeRule.setContent {
             IOITubeTheme {
-                VideoPlayer(source = null)
+                VideoPlayer(
+                    player = player,
+                    stream = stream,
+                    videoOptions = this.stream.videoOnly,
+                    audioOptions = audioOptions,
+                    selectedVideo = selectedVideo,
+                    selectedAudio = selectedAudio,
+                    onSelectAuto = {},
+                    onSelectVideo = {},
+                    onSelectAudio = onSelectAudio,
+                    scale = VideoScale.FIT,
+                    onScaleChange = onScaleChange,
+                    isFullscreen = isFullscreen,
+                    onToggleFullscreen = onToggleFullscreen,
+                )
             }
         }
+    }
+
+    @Test
+    fun `missing stream shows unavailable message instead of player`() {
+        show(stream = null)
 
         composeRule.onNodeWithText("Відео недоступне").assertExists()
     }
 
     @Test
-    fun `blank url shows unavailable message instead of player`() {
-        composeRule.setContent {
-            IOITubeTheme {
-                VideoPlayer(source = PlayerSource(url = "   ", isHls = false, fallbackUrl = null))
-            }
-        }
-
-        composeRule.onNodeWithText("Відео недоступне").assertExists()
-    }
-
-    @Test
-    fun `available source renders player without unavailable message`() {
-        composeRule.setContent {
-            IOITubeTheme {
-                VideoPlayer(source = progressive)
-            }
-        }
+    fun `available stream hides the unavailable message`() {
+        show()
 
         composeRule.onNodeWithText("Відео недоступне").assertDoesNotExist()
     }
 
     @Test
-    fun `quality menu is absent while hls manifest has no video tracks yet`() {
-        composeRule.setContent {
-            IOITubeTheme {
-                VideoPlayer(
-                    source = PlayerSource(
-                        url = "https://manifest.example/hls_variant",
-                        isHls = true,
-                        fallbackUrl = "https://example.com/v.mp4",
-                    ),
-                )
-            }
-        }
+    fun `audio section is shown only with more than one track`() {
+        show(audioOptions = listOf(english, ukrainian))
 
-        composeRule.onNodeWithText("Авто").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Налаштування").performClick()
+        composeRule.onNodeWithText("Аудіо").assertExists()
+        composeRule.onNodeWithText("Українська · дубляж").assertExists()
+    }
+
+    @Test
+    fun `single audio track hides the audio section`() {
+        show(audioOptions = listOf(ukrainian), selectedAudio = ukrainian)
+
+        composeRule.onNodeWithContentDescription("Налаштування").performClick()
+        composeRule.onNodeWithText("Аудіо").assertDoesNotExist()
+    }
+
+    @Test
+    fun `selecting an audio track reports it`() {
+        var selected: AudioTrackOption? = null
+        show(onSelectAudio = { selected = it })
+
+        composeRule.onNodeWithContentDescription("Налаштування").performClick()
+        composeRule.onNodeWithText("Українська · дубляж").performClick()
+
+        assertThat(selected).isEqualTo(ukrainian)
+    }
+
+    @Test
+    fun `scale item reports fill`() {
+        var scale: VideoScale? = null
+        show(onScaleChange = { scale = it })
+
+        composeRule.onNodeWithContentDescription("Налаштування").performClick()
+        composeRule.onNodeWithText("Заповнити").performClick()
+
+        assertThat(scale).isEqualTo(VideoScale.FILL)
+    }
+
+    @Test
+    fun `fit and fill map to the right resize mode`() {
+        assertThat(resizeModeFor(VideoScale.FIT))
+            .isEqualTo(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+        assertThat(resizeModeFor(VideoScale.FILL))
+            .isEqualTo(AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
     }
 
     @Test
     fun `fullscreen button is hidden without a callback`() {
-        composeRule.setContent {
-            IOITubeTheme {
-                VideoPlayer(source = progressive)
-            }
-        }
+        show()
 
-        composeRule.onNodeWithContentDescription("На весь екран").assertDoesNotExist()
-        composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertDoesNotExist()
-    }
-
-    @Test
-    fun `fullscreen button is shown and reflects the state with a callback`() {
-        composeRule.setContent {
-            IOITubeTheme {
-                VideoPlayer(source = progressive, isFullscreen = true, onToggleFullscreen = {})
-            }
-        }
-
-        composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertExists()
         composeRule.onNodeWithContentDescription("На весь екран").assertDoesNotExist()
     }
 
     @Test
     fun `unavailable fullscreen still offers the exit button`() {
-        composeRule.setContent {
-            IOITubeTheme {
-                VideoPlayer(source = null, isFullscreen = true, onToggleFullscreen = {})
-            }
-        }
+        show(stream = null, isFullscreen = true, onToggleFullscreen = {})
 
         composeRule.onNodeWithText("Відео недоступне").assertExists()
         composeRule.onNodeWithContentDescription("Вийти з повного екрана").assertExists()

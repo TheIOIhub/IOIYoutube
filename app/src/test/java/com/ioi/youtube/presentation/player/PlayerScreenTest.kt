@@ -1,13 +1,20 @@
 package com.ioi.youtube.presentation.player
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performGesture
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.google.common.truth.Truth.assertThat
 import com.ioi.youtube.domain.model.Comment
 import com.ioi.youtube.domain.model.UiState
@@ -76,13 +83,10 @@ class PlayerScreenTest {
         composeRule.onNodeWithText("First!").assertExists()
         composeRule.onNodeWithText("Закріплено").assertExists()
 
-        // The last LazyColumn item (RecommendationsSection) sits below the 320x470dp Robolectric
-        // test window viewport, so it is not composed until we scroll. Swipe on the root to reveal it.
-        // A semantics-based scroll is unusable here: onNode(hasScrollAction()).performScrollToNode(...)
-        // fails with "Expected exactly '1' node but found '2' nodes that satisfy: (ScrollBy is defined)".
-        composeRule.onRoot().performGesture {
-            swipeUp(startY = 400f, endY = 50f, durationMillis = 300)
-        }
+        // Рекомендації — великі вертикальні картки в LazyColumn, тож сам list scrollable;
+        // свайп по root скролить його, і заголовок рекомендацій підніматиметься над вікном.
+        composeRule.onNode(hasScrollAction())
+            .performScrollToNode(hasText("Рекомендації"))
 
         composeRule.onNodeWithText("Рекомендації").assertExists()
     }
@@ -206,5 +210,101 @@ class PlayerScreenTest {
         composeRule.onNodeWithContentDescription("На весь екран").performClick()
 
         assertThat(toggled).isTrue()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `player stays pinned while the page scrolls`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Success(
+                            VideoStream("https://example.com/v.mp4", "720p", "MPEG-4"),
+                        ),
+                        comments = UiState.Success(emptyList()),
+                    ),
+                    onVideoClick = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        val before = composeRule.onNodeWithTag("player-container")
+            .fetchSemanticsNode().boundsInRoot.top
+
+        composeRule.onRoot().performGesture {
+            swipeUp(startY = 400f, endY = 50f, durationMillis = 300)
+        }
+
+        val after = composeRule.onNodeWithTag("player-container")
+            .fetchSemanticsNode().boundsInRoot.top
+
+        assertThat(after).isEqualTo(before)
+    }
+
+    @Test
+    fun `fullscreen toggle keeps the same player holder`() {
+        var fullscreen by mutableStateOf(false)
+        var created = 0
+        val holders = mutableListOf<PlayerHolder>()
+
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Success(
+                            VideoStream("https://example.com/v.mp4", "720p", "MPEG-4"),
+                        ),
+                        comments = UiState.Success(emptyList()),
+                    ),
+                    onVideoClick = {},
+                    onRetry = {},
+                    isFullscreen = fullscreen,
+                    onToggleFullscreen = {},
+                    holderFactory = { context ->
+                        PlayerHolder(context).also {
+                            created++
+                            holders += it
+                        }
+                    },
+                )
+            }
+        }
+
+        composeRule.runOnIdle { fullscreen = true }
+        composeRule.waitForIdle()
+
+        assertThat(created).isEqualTo(1)
+        holders.forEach { it.release() }
+    }
+
+    @Test
+    fun `recommendations open a video`() {
+        var clicked: String? = null
+
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Success(
+                            VideoStream("https://example.com/v.mp4", "720p", "MPEG-4"),
+                        ),
+                        comments = UiState.Success(emptyList()),
+                    ),
+                    onVideoClick = { clicked = it },
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasScrollAction())
+            .performScrollToNode(hasText("Video aaaaaaaaaaa"))
+        composeRule.onNodeWithText("Video aaaaaaaaaaa").performClick()
+
+        assertThat(clicked).isEqualTo("aaaaaaaaaaa")
     }
 }
