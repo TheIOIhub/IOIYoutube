@@ -3,8 +3,10 @@ package com.ioi.youtube.data.mapper
 import com.google.common.truth.Truth.assertThat
 import com.ioi.youtube.data.model.RawComment
 import com.ioi.youtube.data.model.RawVideoDetails
+import com.ioi.youtube.data.model.RawAudioTrack
 import com.ioi.youtube.data.model.RawVideoStream
 import com.ioi.youtube.data.model.RawVideoSummary
+import com.ioi.youtube.data.model.RawVideoVariant
 import org.junit.Test
 
 class RemoteMappersTest {
@@ -112,5 +114,25 @@ class RemoteMappersTest {
         )
 
         assertThat(raw.toDomain().uploadedAt).isEqualTo(1_700_000_000_000)
+    }
+
+    @Test
+    fun `maps video-only variants and audio tracks`() {
+        val raw = RawVideoStream(
+            url = "https://v/360.mp4",
+            resolution = "360p",
+            format = "MPEG-4",
+            hlsUrl = "https://hls",
+            videoOnly = listOf(RawVideoVariant("https://v/1080.mp4", 1080, 2_000_000)),
+            audioTracks = listOf(
+                RawAudioTrack("uk.1", "Ukrainian", "uk", "https://a/uk", 128_000, false),
+            ),
+        )
+
+        val domain = raw.toDomain()
+
+        assertThat(domain.videoOnly.single().height).isEqualTo(1080)
+        assertThat(domain.audioTracks.single().label).isEqualTo("Українська · дубляж")
+        assertThat(domain.audioTracks.single().original).isFalse()
     }
 }

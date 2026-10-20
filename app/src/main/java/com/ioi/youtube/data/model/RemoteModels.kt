@@ -48,4 +48,21 @@ data class RawVideoStream(
     val resolution: String,
     val format: String,
     val hlsUrl: String? = null,
+    val videoOnly: List<RawVideoVariant> = emptyList(),
+    val audioTracks: List<RawAudioTrack> = emptyList(),
+)
+
+data class RawVideoVariant(
+    val url: String,
+    val height: Int,
+    val bitrate: Int,
+)
+
+data class RawAudioTrack(
+    val id: String,
+    val name: String?,
+    val language: String?,
+    val url: String,
+    val bitrate: Int,
+    val original: Boolean,
 )

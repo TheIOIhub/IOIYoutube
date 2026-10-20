@@ -1,9 +1,11 @@
 package com.ioi.youtube.data.remote
 
+import com.ioi.youtube.data.model.RawAudioTrack
 import com.ioi.youtube.data.model.RawComment
 import com.ioi.youtube.data.model.RawVideoDetails
 import com.ioi.youtube.data.model.RawVideoStream
 import com.ioi.youtube.data.model.RawVideoSummary
+import com.ioi.youtube.data.model.RawVideoVariant
 import com.ioi.youtube.domain.model.FeedTopic
 import com.ioi.youtube.util.HtmlText
 import com.ioi.youtube.util.YouTubeUrlParser
@@ -17,6 +19,8 @@ import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.StreamingService
 import org.schabi.newpipe.extractor.comments.CommentsInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfoItem
+import org.schabi.newpipe.extractor.stream.AudioTrackType
+import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.Description
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
@@ -109,14 +113,31 @@ class NewPipeRemoteDataSource @Inject constructor(
     override suspend fun fetchVideoStream(videoId: String): RawVideoStream =
         withContext(Dispatchers.IO) {
             val info = StreamInfo.getInfo(YouTubeUrlParser.buildWatchUrl(videoId))
-            val stream = pickBestVideoStream(info)
+            val muxed = pickBestVideoStream(info)
             RawVideoStream(
-                url = stream.url.orEmpty(),
-                resolution = stream.resolution.orEmpty(),
-                format = stream.format?.name.orEmpty(),
-                // HLS дає всі якості (144p…1080p) і адаптивне перемикання;
-                // progressive лишається запасним варіантом.
+                url = muxed.url.orEmpty(),
+                resolution = muxed.resolution.orEmpty(),
+                format = muxed.format?.name.orEmpty(),
                 hlsUrl = info.hlsUrl?.takeIf { it.isNotBlank() },
+                videoOnly = info.videoOnlyStreams.mapNotNull { stream ->
+                    val url = stream.url?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                    RawVideoVariant(
+                        url = url,
+                        height = stream.resolutionPixels(),
+                        bitrate = stream.bitrate,
+                    )
+                },
+                audioTracks = info.audioStreams.mapNotNull { stream ->
+                    val url = stream.url?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                    RawAudioTrack(
+                        id = stream.audioTrackId.orEmpty(),
+                        name = stream.audioTrackName,
+                        language = stream.audioLocale?.language,
+                        url = url,
+                        bitrate = stream.averageBitrate,
+                        original = stream.audioTrackType == AudioTrackType.ORIGINAL,
+                    )
+                },
             )
         }
 

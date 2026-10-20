@@ -10,8 +10,10 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import io.mockk.verifyOrder
 import kotlinx.coroutines.test.runTest
+import com.ioi.youtube.data.mapper.toDomain
 import org.junit.After
 import org.junit.Test
+import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.ListExtractor
 import org.schabi.newpipe.extractor.NewPipe
@@ -23,12 +25,14 @@ import org.schabi.newpipe.extractor.comments.CommentsInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfoItem
 import org.schabi.newpipe.extractor.linkhandler.ListLinkHandler
 import org.schabi.newpipe.extractor.search.SearchExtractor
+import org.schabi.newpipe.extractor.stream.AudioTrackType
 import org.schabi.newpipe.extractor.stream.Description
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.StreamType
 import org.schabi.newpipe.extractor.stream.VideoStream
 import java.io.IOException
+import java.util.Locale
 import kotlin.random.Random
 
 /**
@@ -98,6 +102,39 @@ class NewPipeRemoteDataSourceTest {
 
     private fun <T : InfoItem> emptyPage(items: List<T>): ListExtractor.InfoItemsPage<T> =
         ListExtractor.InfoItemsPage(items, null, emptyList())
+
+    private fun videoOnlyStream(url: String, resolution: String): VideoStream {
+        val stream = mockk<VideoStream>(relaxed = true)
+        every { stream.url } returns url
+        stream.setFinalField("resolution", resolution)
+        stream.setFinalField("isVideoOnly", true)
+        every { stream.bitrate } returns 2_000_000
+        return stream
+    }
+
+    /**
+     * У NewPipe 0.26.5 немає `resolutionPixels()` — `resolution` — публічне final-поле,
+     * якого Kotlin читає напряму (getfield), тож MockK його не перехоплює. Розширення
+     * копіює логіку з NewPipeRemoteDataSource і читає саме це поле рефлексією.
+     */
+    private fun VideoStream.resolutionPixels(): Int =
+        resolution?.substringBefore('p')?.substringBefore('P')?.toIntOrNull() ?: 0
+
+    private fun audioStream(
+        id: String,
+        name: String,
+        locale: Locale,
+        type: AudioTrackType,
+    ): AudioStream {
+        val stream = mockk<AudioStream>(relaxed = true)
+        every { stream.url } returns "https://a/$id"
+        every { stream.averageBitrate } returns 128_000
+        every { stream.audioTrackId } returns id
+        every { stream.audioTrackName } returns name
+        every { stream.audioLocale } returns locale
+        every { stream.audioTrackType } returns type
+        return stream
+    }
 
     /** NewPipe `VideoStream` не має публічного конструктора — тільки через ITag, тому мок. */
     private fun videoStream(url: String, resolution: String): VideoStream {
@@ -303,6 +340,28 @@ class NewPipeRemoteDataSourceTest {
         assertThat(stream.url).isEqualTo("https://p/360.mp4")
         assertThat(stream.resolution).isEqualTo("360p")
         assertThat(stream.hlsUrl).isEqualTo("https://manifest.googlevideo.com/hls_variant?x=1")
+    }
+
+    @Test
+    fun `video stream maps video-only variants and audio tracks`() = runTest {
+        val info = mockk<StreamInfo>(relaxed = true)
+        every { info.videoStreams } returns listOf(videoStream("https://p/360.mp4", "360p"))
+        every { info.videoOnlyStreams } returns listOf(videoOnlyStream("https://p/1080.mp4", "1080p"))
+        every { info.audioStreams } returns listOf(
+            audioStream("uk.1", "Ukrainian", Locale("uk"), AudioTrackType.DUBBED),
+            audioStream("en.1", "English", Locale("en"), AudioTrackType.ORIGINAL),
+        )
+        every { info.hlsUrl } returns "https://hls_variant"
+        mockkStatic(StreamInfo::class)
+        every { StreamInfo.getInfo(any<String>()) } returns info
+        stubYouTubeService(mockk<StreamingService>(relaxed = true))
+
+        val stream = NewPipeRemoteDataSource().fetchVideoStream("dQw4w9WgXcQ").toDomain()
+
+        assertThat(stream.videoOnly.map { it.height }).containsExactly(1080)
+        assertThat(stream.audioTracks.map { it.id }).containsExactly("en.1", "uk.1").inOrder()
+        assertThat(stream.audioTracks.first { it.id == "uk.1" }.original).isFalse()
+        assertThat(stream.audioTracks.first { it.id == "en.1" }.original).isTrue()
     }
 
     @Test
