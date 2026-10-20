@@ -58,4 +58,17 @@ class IOITubeBottomBarTest {
 
         assertThat(navigated).isEqualTo(Routes.SEARCH)
     }
+
+    @Test
+    fun `shorts tab is in the bottom bar next to the other two tabs`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                IOITubeBottomBar(currentRoute = Routes.SHORTS, onNavigate = {})
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Головна").assertExists()
+        composeRule.onNodeWithContentDescription("Shorts").assertExists()
+        composeRule.onNodeWithContentDescription("Пошук").assertExists()
+    }
 }

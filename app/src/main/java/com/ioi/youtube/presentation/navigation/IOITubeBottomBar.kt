@@ -23,14 +23,14 @@ fun IOITubeBottomBar(
             icon = { Icon(Icons.Filled.Home, contentDescription = "Головна") },
         )
         NavigationBarItem(
-            selected = currentRoute == Routes.SEARCH,
-            onClick = { onNavigate(Routes.SEARCH) },
-            icon = { Icon(Icons.Filled.Search, contentDescription = "Пошук") },
-        )
-        NavigationBarItem(
             selected = currentRoute == Routes.SHORTS,
             onClick = { onNavigate(Routes.SHORTS) },
             icon = { Icon(Icons.Filled.SmartDisplay, contentDescription = "Shorts") },
+        )
+        NavigationBarItem(
+            selected = currentRoute == Routes.SEARCH,
+            onClick = { onNavigate(Routes.SEARCH) },
+            icon = { Icon(Icons.Filled.Search, contentDescription = "Пошук") },
         )
     }
 }

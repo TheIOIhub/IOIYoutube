@@ -78,7 +78,11 @@ fun ShortsScreen(
                     val current = feed.data.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
                     onLoadStream(current.id)
                     feed.data.getOrNull(pagerState.currentPage + 1)?.let { onLoadStream(it.id) }
-                    if (pagerState.currentPage >= feed.data.size - 2) onLoadMore()
+                    // loadMore запускається лише на передостанній/останній сторінці
+                    // і ніколи не повторюється, поки [loadingMore] іще йде.
+                    if (pagerState.currentPage >= feed.data.size - 2 && !uiState.loadingMore) {
+                        onLoadMore()
+                    }
                 }
 
                 VerticalPager(

@@ -34,7 +34,9 @@ fun ShortVideoPlayer(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var paused by remember(source) { mutableStateOf(false) }
+    // Ключ — URL потоку, а не [source]: PlayerSource — нова інстансія при кожному
+    // recompose сторінки, і `remember(source)` скидав б [paused] після кожного тапу.
+    var paused by remember(source?.url) { mutableStateOf(false) }
     val playable = source?.takeIf { it.url.isNotBlank() }
 
     val exoPlayer = remember(playable?.url) {
