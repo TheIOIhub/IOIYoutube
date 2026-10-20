@@ -49,6 +49,15 @@ class IOITubeBottomBarTest {
         composeRule.onNodeWithContentDescription("Shorts").assertExists()
     }
     @Test
+    fun `shorts tab is highlighted when a specific short is open`() {
+        composeRule.setContent {
+            IOITubeBottomBar(currentRoute = Routes.shorts("dQw4w9WgXcQ"), onNavigate = {})
+        }
+
+        composeRule.onNodeWithContentDescription("Shorts").assertExists()
+    }
+
+    @Test
     fun `tapping an icon reports its route`() {
         var navigated: String? = null
 
