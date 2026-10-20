@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import com.ioi.youtube.data.local.CachedVideoDao
+import com.ioi.youtube.data.local.CachedVideoEntity
 import com.ioi.youtube.data.local.IOIDatabase
 import com.ioi.youtube.data.model.RawVideoSummary
 import com.ioi.youtube.domain.model.FeedSort
@@ -55,24 +56,28 @@ class FeedRepositoryImplTest {
         uploadedAt = uploadedAt,
     )
 
-    @Test
-    fun `all with relevance emits cache then fresh and writes cache`() = runTest {
+    private suspend fun seedCache(vararg ids: String) {
         videoDao.replaceSource(
             FeedRepositoryImpl.SOURCE_HOME,
-            listOf(
-                com.ioi.youtube.data.local.CachedVideoEntity(
-                    id = "cached1",
+            ids.map { id ->
+                CachedVideoEntity(
+                    id = id,
                     sourceKey = FeedRepositoryImpl.SOURCE_HOME,
-                    title = "cached1",
+                    title = id,
                     uploaderName = "Ch",
                     thumbnailUrl = "u",
                     durationSeconds = 1,
                     viewCount = 10,
                     uploadDate = null,
                     cachedAt = 0,
-                ),
-            ),
+                )
+            },
         )
+    }
+
+    @Test
+    fun `all with relevance emits cache then fresh and writes cache`() = runTest {
+        seedCache("cached1")
         remote.feed = listOf(raw("fresh1"))
 
         repository.getFeedPage(FeedTopic.ALL, FeedSort.RELEVANCE).test {
@@ -94,22 +99,7 @@ class FeedRepositoryImplTest {
 
     @Test
     fun `topic feed ignores and does not write the cache`() = runTest {
-        videoDao.replaceSource(
-            FeedRepositoryImpl.SOURCE_HOME,
-            listOf(
-                com.ioi.youtube.data.local.CachedVideoEntity(
-                    id = "cached1",
-                    sourceKey = FeedRepositoryImpl.SOURCE_HOME,
-                    title = "cached1",
-                    uploaderName = "Ch",
-                    thumbnailUrl = "u",
-                    durationSeconds = 1,
-                    viewCount = 10,
-                    uploadDate = null,
-                    cachedAt = 0,
-                ),
-            ),
-        )
+        seedCache("cached1")
         remote.feedByTopic[FeedTopic.GAMES] = listOf(raw("game1"))
 
         repository.getFeedPage(FeedTopic.GAMES, FeedSort.RELEVANCE).test {
@@ -125,22 +115,7 @@ class FeedRepositoryImplTest {
 
     @Test
     fun `non relevance sort ignores and does not write the cache`() = runTest {
-        videoDao.replaceSource(
-            FeedRepositoryImpl.SOURCE_HOME,
-            listOf(
-                com.ioi.youtube.data.local.CachedVideoEntity(
-                    id = "cached1",
-                    sourceKey = FeedRepositoryImpl.SOURCE_HOME,
-                    title = "cached1",
-                    uploaderName = "Ch",
-                    thumbnailUrl = "u",
-                    durationSeconds = 1,
-                    viewCount = 10,
-                    uploadDate = null,
-                    cachedAt = 0,
-                ),
-            ),
-        )
+        seedCache("cached1")
         remote.feed = listOf(raw("fresh1", views = 500))
 
         repository.getFeedPage(FeedTopic.ALL, FeedSort.POPULAR).test {

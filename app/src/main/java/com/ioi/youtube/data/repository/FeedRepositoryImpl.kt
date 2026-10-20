@@ -59,7 +59,7 @@ class FeedRepositoryImpl @Inject constructor(
                     SOURCE_HOME,
                     sorted.map { it.toEntity(SOURCE_HOME, System.currentTimeMillis()) },
                 )
-            }
+            }.onFailure { Log.w(TAG, "feed cache write failed", it) }
         }
         emit(UiState.Success(FeedPage(sorted)))
     }.flowOn(Dispatchers.IO)
