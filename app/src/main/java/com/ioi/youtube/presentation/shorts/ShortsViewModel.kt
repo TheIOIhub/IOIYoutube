@@ -33,7 +33,14 @@ class ShortsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val refreshTrigger = MutableStateFlow(0)
-    private val knownIds = mutableSetOf<String>()
+    /**
+     * Id шортсів поточної стрiчки: набiр замiняється кожен раз, коли
+     * [GetShortsUseCase] повертає новi данi (напр. після `retry()`).
+     *
+     * Замiняємо, а не додаємо: дедуплікація в [loadMore] порiвнює «more»-сторiнку
+     * з поточною стрiчкою, а не з усім, що колись вантажилося.
+     */
+    private val knownIds: MutableSet<String> = mutableSetOf()
 
     /** Єдине джерело iстини стану екрана; споживається UI напряму. */
     val uiState = MutableStateFlow(ShortsUiState())
@@ -43,7 +50,10 @@ class ShortsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             refreshTrigger.flatMapLatest { getShorts() }.collect { state ->
-                if (state is UiState.Success) knownIds += state.data.map { it.id }
+                if (state is UiState.Success) {
+                    knownIds.clear()
+                    knownIds.addAll(state.data.map { it.id })
+                }
                 uiState.value = ShortsUiState(shorts = state)
             }
         }
@@ -87,7 +97,7 @@ class ShortsViewModel @Inject constructor(
                     if (state is UiState.Success) {
                         val fresh = state.data.filterNot { it.id in knownIds }
                         if (fresh.isNotEmpty()) {
-                            knownIds += fresh.map { it.id }
+                            knownIds.addAll(fresh.map { it.id })
                             uiState.update { current ->
                                 val existing = (current.shorts as? UiState.Success)?.data.orEmpty()
                                 current.copy(shorts = UiState.Success(existing + fresh))

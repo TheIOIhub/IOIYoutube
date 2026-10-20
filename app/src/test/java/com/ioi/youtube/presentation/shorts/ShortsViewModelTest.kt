@@ -152,6 +152,43 @@ class ShortsViewModelTest {
     }
 
     @Test
+    fun `load more still appends a new short after a feed reload`() = runTest(testDispatcher) {
+        val first = TestData.video("aaaaaaaaaaa")
+        val second = TestData.video("bbbbbbbbbbb")
+        val third = TestData.video("ccccccccccc")
+        val fourth = TestData.video("ddddddddddd")
+        val fifth = TestData.video("eeeeeeeeeee")
+        shorts.setShorts(UiState.Success(listOf(first, second)))
+        shorts.setMoreShorts(UiState.Success(listOf(third, fourth)))
+        val viewModel = createViewModel()
+
+        viewModel.uiState.test {
+            advanceUntilIdle()
+            assertThat(viewModel.uiState.value.shorts)
+                .isEqualTo(UiState.Success(listOf(first, second)))
+
+            viewModel.loadMore()
+            advanceUntilIdle()
+            assertThat(viewModel.uiState.value.shorts)
+                .isEqualTo(UiState.Success(listOf(first, second, third, fourth)))
+
+            // Повторне завантаження стрiчки: новий набiр не мiстить ранiше
+            // довантаженi «more»-елементи, а «more»-сторiнка їх повертає.
+            shorts.setShorts(UiState.Success(listOf(first, second, third)))
+            shorts.setMoreShorts(UiState.Success(listOf(fourth, fifth)))
+            advanceUntilIdle()
+
+            viewModel.loadMore()
+            advanceUntilIdle()
+
+            assertThat(viewModel.uiState.value.shorts)
+                .isEqualTo(UiState.Success(listOf(first, second, third, fourth, fifth)))
+            assertThat(viewModel.uiState.value.loadingMore).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `retry reloads the feed`() = runTest(testDispatcher) {
         shorts.setShorts(UiState.Success(listOf(TestData.video("aaaaaaaaaaa"))))
         val viewModel = createViewModel()
