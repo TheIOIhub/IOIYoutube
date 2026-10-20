@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.flowOf
 
 class FakeFeedRepository : FeedRepository {
 
-    private val pages = ArrayDeque<UiState<FeedPage>>()
+    private val pageFlows = ArrayDeque<Flow<UiState<FeedPage>>>()
     private val shortsPages = ArrayDeque<UiState<List<VideoSummary>>>()
 
     var feedCalls = 0
@@ -28,7 +28,11 @@ class FakeFeedRepository : FeedRepository {
         private set
 
     fun enqueuePage(state: UiState<FeedPage>) {
-        pages.addLast(state)
+        pageFlows.addLast(flowOf(state))
+    }
+
+    fun enqueuePageFlow(vararg states: UiState<FeedPage>) {
+        pageFlows.addLast(flowOf(*states))
     }
 
     fun enqueueShorts(state: UiState<List<VideoSummary>>) {
@@ -39,12 +43,12 @@ class FakeFeedRepository : FeedRepository {
         feedCalls++
         lastTopic = topic
         lastSort = sort
-        val state = if (pages.isEmpty()) {
-            UiState.Success(FeedPage(emptyList(), exhausted = true))
+        val flow = if (pageFlows.isEmpty()) {
+            flowOf(UiState.Success(FeedPage(emptyList(), exhausted = true)))
         } else {
-            pages.removeFirst()
+            pageFlows.removeFirst()
         }
-        return flowOf(state)
+        return flow
     }
 
     override fun getFeedShorts(

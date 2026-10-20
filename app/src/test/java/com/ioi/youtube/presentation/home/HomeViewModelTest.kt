@@ -179,4 +179,83 @@ class HomeViewModelTest {
             assertThat(viewModel.uiState.value.items.filterIsInstance<FeedItem.ShortsBlock>()).isEmpty()
             assertThat(viewModel.uiState.value.items.filterIsInstance<FeedItem.Video>()).hasSize(4)
         }
+
+    @Test
+    fun `refresh keeps the feed when only the cache is emitted`() = runTest(testDispatcher) {
+        repository.enqueuePage(UiState.Success(FeedPage(videos(4))))
+        repository.enqueueShorts(UiState.Success(shorts(2)))
+        repository.enqueuePageFlow(
+            UiState.Loading,
+            UiState.Success(FeedPage(videos(4)), fromCache = true),
+        )
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.items.filterIsInstance<FeedItem.Video>()).hasSize(4)
+        assertThat(viewModel.uiState.value.loading).isFalse()
+        assertThat(viewModel.uiState.value.error).isNotNull()
+    }
+
+    @Test
+    fun `load more keeps the feed when only the cache is emitted`() = runTest(testDispatcher) {
+        repository.enqueuePage(UiState.Success(FeedPage(videos(4))))
+        repository.enqueueShorts(UiState.Success(shorts(2)))
+        repeat(3) {
+            repository.enqueuePageFlow(
+                UiState.Loading,
+                UiState.Success(FeedPage(videos(4)), fromCache = true),
+            )
+        }
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.loadMore()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.items.filterIsInstance<FeedItem.Video>()).hasSize(4)
+        assertThat(viewModel.uiState.value.loadingMore).isFalse()
+        assertThat(viewModel.uiState.value.loadMoreError).isNotNull()
+        assertThat(viewModel.uiState.value.exhausted).isFalse()
+    }
+
+    @Test
+    fun `feed never renders a block with a single short`() = runTest(testDispatcher) {
+        repository.enqueuePage(UiState.Success(FeedPage(videos(8))))
+        repository.enqueueShorts(UiState.Success(shorts(3)))
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val items = viewModel.uiState.value.items
+        assertThat(items.filterIsInstance<FeedItem.Video>()).hasSize(8)
+        val blocks = items.filterIsInstance<FeedItem.ShortsBlock>()
+        assertThat(blocks).hasSize(1)
+        blocks.forEach { assertThat(it.shorts).hasSize(2) }
+    }
+
+    @Test
+    fun `block ids stay unique across topic changes`() = runTest(testDispatcher) {
+        repository.enqueuePage(UiState.Success(FeedPage(videos(4))))
+        repository.enqueueShorts(UiState.Success(shorts(2)))
+        repository.enqueuePage(UiState.Success(FeedPage(videos(4))))
+        repository.enqueueShorts(UiState.Success(shorts(2)))
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        val firstIds = viewModel.uiState.value.items
+            .filterIsInstance<FeedItem.ShortsBlock>()
+            .map { it.id }
+
+        viewModel.selectTopic(FeedTopic.GAMES)
+        advanceUntilIdle()
+        val secondIds = viewModel.uiState.value.items
+            .filterIsInstance<FeedItem.ShortsBlock>()
+            .map { it.id }
+
+        assertThat(firstIds + secondIds).isNotEmpty()
+        assertThat(firstIds + secondIds).containsNoDuplicates()
+    }
 }

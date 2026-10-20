@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -44,7 +46,10 @@ class HomeViewModel @Inject constructor(
     private val shownVideoIds = mutableSetOf<String>()
     private val shownShortIds = mutableSetOf<String>()
     private var videosSinceBlock = 0
+    private var blockCounter = 0
+    private var feedGeneration = 0
     private var loadJob: Job? = null
+    private var loadMoreJob: Job? = null
 
     init {
         loadFirstPage(clear = true, freshOnly = false)
@@ -68,6 +73,9 @@ class HomeViewModel @Inject constructor(
     fun refresh() = loadFirstPage(clear = false, freshOnly = true)
 
     private fun loadFirstPage(clear: Boolean, freshOnly: Boolean) {
+        feedGeneration++
+        loadMoreJob?.cancel()
+        loadMoreJob = null
         loadJob?.cancel()
         shownVideoIds.clear()
         shownShortIds.clear()
@@ -113,11 +121,13 @@ class HomeViewModel @Inject constructor(
     fun loadMore() {
         val state = _uiState.value
         if (state.loading || state.loadingMore || state.exhausted || state.items.isEmpty()) return
+        val generation = feedGeneration
         _uiState.update { it.copy(loadingMore = true, loadMoreError = null) }
-        viewModelScope.launch {
+        loadMoreJob = viewModelScope.launch {
             repeat(MAX_EMPTY_ATTEMPTS) {
                 when (val page = awaitPage(state.topic, state.sort, freshOnly = true)) {
                     is UiState.Error -> {
+                        if (generation != feedGeneration) return@launch
                         _uiState.update { it.copy(loadingMore = false, loadMoreError = page.message) }
                         return@launch
                     }
@@ -125,6 +135,7 @@ class HomeViewModel @Inject constructor(
                     is UiState.Success -> {
                         val fresh = page.data.videos.filterNot { it.id in shownVideoIds }
                         if (fresh.isNotEmpty()) {
+                            if (generation != feedGeneration) return@launch
                             shownVideoIds += fresh.map { it.id }
                             _uiState.update { current ->
                                 current.copy(
@@ -140,23 +151,31 @@ class HomeViewModel @Inject constructor(
                     UiState.Loading -> Unit
                 }
             }
+            if (generation != feedGeneration) return@launch
             _uiState.update { it.copy(loadingMore = false, exhausted = true) }
         }
     }
 
     /**
-     * Бере перший «корисний» стан: для refresh — не кеш, для решти — кеш теж ок.
+     * Бере перший «корисний» стан. Якщо потік завершився без нього (наприклад, мережа впала,
+     * а кеш уже віддано), повертає кеш для першого завантаження або помилку — ніколи не кидає.
      */
     private suspend fun awaitPage(
         topic: FeedTopic,
         sort: FeedSort,
         freshOnly: Boolean,
-    ): UiState<FeedPage> = getFeedPage(topic, sort)
-        .filter { state ->
-            state !is UiState.Loading &&
-                (!freshOnly || (state as? UiState.Success)?.fromCache != true)
-        }
-        .first()
+    ): UiState<FeedPage> {
+        var lastCached: UiState.Success<FeedPage>? = null
+        val match = getFeedPage(topic, sort)
+            .onEach { state ->
+                if (state is UiState.Success && state.fromCache) lastCached = state
+            }
+            .firstOrNull { state ->
+                state !is UiState.Loading &&
+                    (!freshOnly || (state as? UiState.Success)?.fromCache != true)
+            }
+        return match ?: lastCached?.takeIf { !freshOnly } ?: UiState.Error(ERROR_LOAD_FEED)
+    }
 
     private fun appendVideos(target: List<FeedItem>, videos: List<VideoSummary>): List<FeedItem> {
         val items = target.toMutableList()
@@ -164,8 +183,9 @@ class HomeViewModel @Inject constructor(
             items += FeedItem.Video(video)
             videosSinceBlock++
             if (videosSinceBlock % VIDEOS_PER_BLOCK == 0) {
+                blockCounter++
                 items += FeedItem.ShortsBlock(
-                    id = "shorts-$videosSinceBlock",
+                    id = "shorts-$blockCounter",
                     shorts = emptyList(),
                 )
             }
@@ -203,10 +223,11 @@ class HomeViewModel @Inject constructor(
         shownShortIds += shorts.map { it.id }
         val filled = mutableMapOf<String, List<VideoSummary>>()
         var cursor = 0
-        blocks.forEach { block ->
+        for (block in blocks) {
             val slice = shorts.drop(cursor).take(SHORTS_PER_BLOCK)
+            if (slice.size < SHORTS_PER_BLOCK) break
+            filled[block.id] = slice
             cursor += slice.size
-            if (slice.isNotEmpty()) filled[block.id] = slice
         }
 
         _uiState.update { current ->
@@ -228,5 +249,6 @@ class HomeViewModel @Inject constructor(
         const val VIDEOS_PER_BLOCK = 4
         const val SHORTS_PER_BLOCK = 2
         const val MAX_EMPTY_ATTEMPTS = 3
+        const val ERROR_LOAD_FEED = "Не вдалося завантажити стрічку"
     }
 }
