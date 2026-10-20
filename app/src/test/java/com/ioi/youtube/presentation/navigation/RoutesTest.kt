@@ -34,4 +34,20 @@ class RoutesTest {
     fun `shorts route`() {
         assertThat(Routes.SHORTS).isEqualTo("shorts")
     }
+
+    @Test
+    fun `shorts pattern has optional video id`() {
+        assertThat(Routes.SHORTS_PATTERN).isEqualTo("shorts?videoId={videoId}")
+    }
+
+    @Test
+    fun `shorts route without id returns the tab route`() {
+        assertThat(Routes.shorts()).isEqualTo("shorts")
+        assertThat(Routes.shorts(null)).isEqualTo("shorts")
+    }
+
+    @Test
+    fun `shorts route with id carries the video`() {
+        assertThat(Routes.shorts("dQw4w9WgXcQ")).isEqualTo("shorts?videoId=dQw4w9WgXcQ")
+    }
 }

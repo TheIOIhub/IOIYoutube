@@ -1,5 +1,6 @@
 package com.ioi.youtube.presentation.shorts
 
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import com.ioi.youtube.domain.model.UiState
@@ -7,6 +8,7 @@ import com.ioi.youtube.domain.model.VideoStream
 import com.ioi.youtube.domain.usecase.GetMoreShortsUseCase
 import com.ioi.youtube.domain.usecase.GetShortsUseCase
 import com.ioi.youtube.domain.usecase.GetVideoStreamUseCase
+import com.ioi.youtube.presentation.navigation.Routes
 import com.ioi.youtube.testutil.FakeShortsRepository
 import com.ioi.youtube.testutil.FakeVideoRepository
 import com.ioi.youtube.testutil.TestData
@@ -38,7 +40,10 @@ class ShortsViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel() = ShortsViewModel(
+    private fun createViewModel(videoId: String? = null) = ShortsViewModel(
+        savedStateHandle = SavedStateHandle(
+            videoId?.let { mapOf(Routes.ARG_VIDEO_ID to it) } ?: emptyMap(),
+        ),
         getShorts = GetShortsUseCase(shorts),
         getMoreShorts = GetMoreShortsUseCase(shorts),
         getVideoStream = GetVideoStreamUseCase(videos),
@@ -204,4 +209,36 @@ class ShortsViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun `requested short is placed first even when absent from the feed`() =
+        runTest(testDispatcher) {
+            shorts.setShorts(UiState.Success(listOf(TestData.video(id = "feedvideo01"))))
+
+            val viewModel = createViewModel(videoId = "requested01")
+            advanceUntilIdle()
+
+            val data = (viewModel.uiState.value.shorts as UiState.Success).data
+            assertThat(data.first().id).isEqualTo("requested01")
+            assertThat(data.map { it.id }).contains("feedvideo01")
+        }
+
+    @Test
+    fun `requested short stays first when it is already in the feed`() =
+        runTest(testDispatcher) {
+            shorts.setShorts(
+                UiState.Success(
+                    listOf(
+                        TestData.video(id = "feedvideo01"),
+                        TestData.video(id = "requested01"),
+                    ),
+                ),
+            )
+
+            val viewModel = createViewModel(videoId = "requested01")
+            advanceUntilIdle()
+
+            val data = (viewModel.uiState.value.shorts as UiState.Success).data
+            assertThat(data.map { it.id }).containsExactly("requested01", "feedvideo01").inOrder()
+        }
 }

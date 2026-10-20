@@ -65,7 +65,7 @@ fun IOITubeBottomBar(
             .padding(horizontal = 4.dp),
     ) {
         Tabs.forEach { (route, label, icon) ->
-            val selected = currentRoute == route
+            val selected = currentRoute?.substringBefore('?') == route
             Box(
                 modifier = Modifier
                     .weight(1f)

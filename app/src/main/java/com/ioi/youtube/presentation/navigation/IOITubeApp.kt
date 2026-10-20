@@ -10,10 +10,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.ioi.youtube.presentation.home.HomeRoute
 import com.ioi.youtube.presentation.player.PlayerRoute
 import com.ioi.youtube.presentation.search.SearchRoute
@@ -26,7 +28,7 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute == Routes.HOME ||
         currentRoute == Routes.SEARCH ||
-        currentRoute == Routes.SHORTS
+        currentRoute?.startsWith(Routes.SHORTS) == true
 
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -56,7 +58,9 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
                     onVideoClick = { videoId ->
                         navController.navigate(Routes.player(videoId))
                     },
-                    onShortClick = { navController.navigate(Routes.SHORTS) },
+                    onShortClick = { videoId ->
+                        navController.navigate(Routes.shorts(videoId))
+                    },
                 )
             }
             composable(Routes.SEARCH) {
@@ -66,7 +70,16 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
                     },
                 )
             }
-            composable(Routes.SHORTS) {
+            composable(
+                route = Routes.SHORTS_PATTERN,
+                arguments = listOf(
+                    navArgument(Routes.ARG_VIDEO_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) {
                 ShortsRoute()
             }
             composable(Routes.PLAYER) {

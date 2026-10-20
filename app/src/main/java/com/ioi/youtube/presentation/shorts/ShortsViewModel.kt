@@ -1,5 +1,6 @@
 package com.ioi.youtube.presentation.shorts
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ioi.youtube.domain.model.UiState
@@ -8,6 +9,7 @@ import com.ioi.youtube.domain.model.VideoSummary
 import com.ioi.youtube.domain.usecase.GetMoreShortsUseCase
 import com.ioi.youtube.domain.usecase.GetShortsUseCase
 import com.ioi.youtube.domain.usecase.GetVideoStreamUseCase
+import com.ioi.youtube.presentation.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,10 +29,14 @@ data class ShortsUiState(
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ShortsViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val getShorts: GetShortsUseCase,
     private val getMoreShorts: GetMoreShortsUseCase,
     private val getVideoStream: GetVideoStreamUseCase,
 ) : ViewModel() {
+
+    private val requestedVideoId: String? =
+        savedStateHandle.get<String>(Routes.ARG_VIDEO_ID)?.takeIf { it.isNotBlank() }
 
     private val refreshTrigger = MutableStateFlow(0)
     /**
@@ -54,9 +60,35 @@ class ShortsViewModel @Inject constructor(
                     knownIds.clear()
                     knownIds.addAll(state.data.map { it.id })
                 }
-                uiState.value = ShortsUiState(shorts = state)
+                uiState.value = ShortsUiState(
+                    shorts = when (state) {
+                        is UiState.Success -> UiState.Success(
+                            withRequestedFirst(state.data),
+                            state.fromCache,
+                        )
+
+                        else -> state
+                    },
+                )
             }
         }
+    }
+
+    /** Передане зі стрічки відео стає першою сторінкою пейджера. */
+    private fun withRequestedFirst(shorts: List<VideoSummary>): List<VideoSummary> {
+        val id = requestedVideoId ?: return shorts
+        val existing = shorts.firstOrNull { it.id == id }
+        val rest = shorts.filterNot { it.id == id }
+        val first = existing ?: VideoSummary(
+            id = id,
+            title = "",
+            uploaderName = "",
+            thumbnailUrl = "",
+            durationSeconds = 0,
+            viewCount = 0,
+            uploadDate = null,
+        )
+        return listOf(first) + rest
     }
 
     fun retry() {
