@@ -97,4 +97,20 @@ class RemoteMappersTest {
 
         assertThat(domain.hlsUrl).isEqualTo("https://manifest.example/hls_variant")
     }
+
+    @Test
+    fun `maps upload timestamp to domain`() {
+        val raw = RawVideoSummary(
+            id = "dQw4w9WgXcQ",
+            title = "Title",
+            uploaderName = "Channel",
+            thumbnailUrl = "https://img/1.jpg",
+            durationSeconds = 75,
+            viewCount = 1500,
+            uploadDate = "2 years ago",
+            uploadedAt = 1_700_000_000_000,
+        )
+
+        assertThat(raw.toDomain().uploadedAt).isEqualTo(1_700_000_000_000)
+    }
 }

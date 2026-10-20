@@ -178,6 +178,7 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         viewCount = viewCount.orZero(),
         uploadDate = textualUploadDate,
         uploaderUrl = uploaderUrl.orEmpty(),
+        uploadedAt = uploadDate?.instant?.toEpochMilli(),
     )
 
     private fun CommentsInfoItem.toRawComment() = RawComment(

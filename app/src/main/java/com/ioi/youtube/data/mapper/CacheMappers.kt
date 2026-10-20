@@ -13,6 +13,7 @@ fun CachedVideoEntity.toDomain(): VideoSummary = VideoSummary(
     durationSeconds = durationSeconds,
     viewCount = viewCount,
     uploadDate = uploadDate,
+    uploadedAt = null,
 )
 
 fun VideoSummary.toEntity(sourceKey: String, cachedAt: Long): CachedVideoEntity =

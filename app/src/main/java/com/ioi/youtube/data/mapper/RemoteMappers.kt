@@ -17,6 +17,7 @@ fun RawVideoSummary.toDomain(): VideoSummary = VideoSummary(
     durationSeconds = durationSeconds,
     viewCount = viewCount,
     uploadDate = uploadDate,
+    uploadedAt = uploadedAt,
 )
 
 fun RawVideoDetails.toDomain(): VideoDetails = VideoDetails(

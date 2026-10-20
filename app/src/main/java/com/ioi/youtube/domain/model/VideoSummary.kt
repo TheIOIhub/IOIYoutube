@@ -8,4 +8,6 @@ data class VideoSummary(
     val durationSeconds: Long,
     val viewCount: Long,
     val uploadDate: String?,
+    /** Реальна дата публікації, epoch millis. У кеш не пишеться. */
+    val uploadedAt: Long? = null,
 )
