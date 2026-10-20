@@ -119,4 +119,32 @@ class SearchScreenTest {
 
         composeRule.onNodeWithText("Нічого не знайдено").assertExists()
     }
+
+    @Test
+    fun `results are shown in one column`() {
+        val results = SearchResults(
+            query = "kotlin",
+            videos = listOf(
+                TestData.video(id = "aaaaaaaaaaa", title = "First result"),
+                TestData.video(id = "bbbbbbbbb", title = "Second result"),
+            ),
+        )
+
+        composeRule.setContent {
+            IOITubeTheme {
+                SearchScreen(
+                    uiState = UiState.Success(results),
+                    onQueryChange = {},
+                    onVideoClick = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        val first = composeRule.onNodeWithText("First result").fetchSemanticsNode().boundsInRoot
+        val second = composeRule.onNodeWithText("Second result").fetchSemanticsNode().boundsInRoot
+
+        assertThat(second.top).isGreaterThan(first.top)
+        assertThat(second.left).isEqualTo(first.left)
+    }
 }

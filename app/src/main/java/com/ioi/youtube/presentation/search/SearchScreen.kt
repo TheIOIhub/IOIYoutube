@@ -4,9 +4,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -32,7 +31,7 @@ import com.ioi.youtube.presentation.components.EmptyBox
 import com.ioi.youtube.presentation.components.ErrorBox
 import com.ioi.youtube.presentation.components.LoadingBox
 import com.ioi.youtube.presentation.components.OfflineBanner
-import com.ioi.youtube.presentation.components.VideoGridCard
+import com.ioi.youtube.presentation.components.VideoCard
 
 @Composable
 fun SearchRoute(
@@ -96,17 +95,12 @@ fun SearchScreen(
                     if (uiState.data.videos.isEmpty()) {
                         EmptyBox(text = "Нічого не знайдено")
                     } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
                             if (uiState.fromCache) {
-                                item(key = "offline-banner") {
-                                    com.ioi.youtube.presentation.components.OfflineBanner()
-                                }
+                                item(key = "offline-banner") { OfflineBanner() }
                             }
                             items(items = uiState.data.videos, key = { it.id }) { video ->
-                                VideoGridCard(video = video, onClick = onVideoClick)
+                                VideoCard(video = video, onClick = onVideoClick)
                             }
                         }
                     }
