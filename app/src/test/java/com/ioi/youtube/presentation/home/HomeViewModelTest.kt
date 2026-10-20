@@ -1,10 +1,14 @@
 package com.ioi.youtube.presentation.home
 
-import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
+import com.ioi.youtube.domain.model.FeedItem
+import com.ioi.youtube.domain.model.FeedPage
+import com.ioi.youtube.domain.model.FeedSort
+import com.ioi.youtube.domain.model.FeedTopic
 import com.ioi.youtube.domain.model.UiState
-import com.ioi.youtube.domain.usecase.GetHomeFeedUseCase
-import com.ioi.youtube.testutil.FakeVideoRepository
+import com.ioi.youtube.domain.usecase.GetFeedPageUseCase
+import com.ioi.youtube.domain.usecase.GetFeedShortsUseCase
+import com.ioi.youtube.testutil.FakeFeedRepository
 import com.ioi.youtube.testutil.TestData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,7 +25,7 @@ import org.junit.Test
 class HomeViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private val repository = FakeVideoRepository()
+    private val repository = FakeFeedRepository()
 
     @Before
     fun setUp() {
@@ -33,52 +37,146 @@ class HomeViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel() = HomeViewModel(GetHomeFeedUseCase(repository))
+    private fun createViewModel() = HomeViewModel(
+        getFeedPage = GetFeedPageUseCase(repository),
+        getFeedShorts = GetFeedShortsUseCase(repository),
+    )
 
-    @Test
-    fun `starts with loading then emits success`() = runTest(testDispatcher) {
-        val videos = listOf(TestData.video(), TestData.video("abcdefghijk"))
-        repository.setFeed(UiState.Success(videos))
+    private fun videos(count: Int) = (1..count).map { index ->
+        TestData.video(id = "video0000$index")
+    }
 
-        createViewModel().uiState.test {
-            assertThat(awaitItem()).isEqualTo(UiState.Loading)
-            assertThat(awaitItem()).isEqualTo(UiState.Success(videos))
-            cancelAndIgnoreRemainingEvents()
-        }
+    private fun shorts(count: Int) = (1..count).map { index ->
+        TestData.video(id = "short0000$index")
     }
 
     @Test
-    fun `emits error state from repository`() = runTest(testDispatcher) {
-        repository.setFeed(UiState.Error("Не вдалося завантажити стрічку"))
+    fun `page adds a shorts block after every fourth video and fills two shorts`() =
+        runTest(testDispatcher) {
+            repository.enqueuePage(UiState.Success(FeedPage(videos(9))))
+            repository.enqueueShorts(UiState.Success(shorts(4)))
 
-        createViewModel().uiState.test {
-            assertThat(awaitItem()).isEqualTo(UiState.Loading)
-            assertThat(awaitItem()).isEqualTo(UiState.Error("Не вдалося завантажити стрічку"))
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `retry re-subscribes to the use case`() = runTest(testDispatcher) {
-        repository.setFeed(UiState.Success(listOf(TestData.video())))
-        val viewModel = createViewModel()
-
-        viewModel.uiState.test {
-            advanceUntilIdle()
-            assertThat(repository.feedCalls).isEqualTo(1)
-
-            viewModel.retry()
+            val viewModel = createViewModel()
             advanceUntilIdle()
 
-            assertThat(repository.feedCalls).isEqualTo(2)
-            cancelAndIgnoreRemainingEvents()
+            val items = viewModel.uiState.value.items
+            assertThat(items.filterIsInstance<FeedItem.Video>()).hasSize(9)
+            assertThat(items.filterIsInstance<FeedItem.ShortsBlock>()).hasSize(2)
+            assertThat(items[4]).isInstanceOf(FeedItem.ShortsBlock::class.java)
+            assertThat(items[9]).isInstanceOf(FeedItem.ShortsBlock::class.java)
+            items.filterIsInstance<FeedItem.ShortsBlock>().forEach {
+                assertThat(it.shorts).hasSize(2)
+            }
+            assertThat(repository.lastShortsCount).isEqualTo(4)
         }
+
+    @Test
+    fun `load more appends fresh videos and another block`() = runTest(testDispatcher) {
+        repository.enqueuePage(UiState.Success(FeedPage(videos(4))))
+        repository.enqueueShorts(UiState.Success(shorts(2)))
+        repository.enqueuePage(UiState.Success(FeedPage(videos(8).drop(4))))
+        repository.enqueueShorts(UiState.Success(shorts(4)))
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.loadMore()
+        advanceUntilIdle()
+
+        val items = viewModel.uiState.value.items
+        assertThat(items.filterIsInstance<FeedItem.Video>()).hasSize(8)
+        assertThat(items.filterIsInstance<FeedItem.ShortsBlock>()).hasSize(2)
+        assertThat(viewModel.uiState.value.loadingMore).isFalse()
+        assertThat(repository.feedCalls).isEqualTo(2)
     }
 
     @Test
-    fun `loading initial value is exposed before subscription`() {
-        // Ще до старту колекції stateIn вiддає initialValue.
+    fun `load more retries duplicate-only pages three times then marks exhausted`() =
+        runTest(testDispatcher) {
+            repository.enqueuePage(UiState.Success(FeedPage(videos(4))))
+            repository.enqueueShorts(UiState.Success(shorts(2)))
+            repeat(3) { repository.enqueuePage(UiState.Success(FeedPage(videos(4)))) }
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+            viewModel.loadMore()
+            advanceUntilIdle()
+
+            assertThat(viewModel.uiState.value.exhausted).isTrue()
+            assertThat(viewModel.uiState.value.loadingMore).isFalse()
+            assertThat(viewModel.uiState.value.items.filterIsInstance<FeedItem.Video>()).hasSize(4)
+            assertThat(repository.feedCalls).isEqualTo(4)
+        }
+
+    @Test
+    fun `load more error keeps the feed and exposes retry`() = runTest(testDispatcher) {
+        repository.enqueuePage(UiState.Success(FeedPage(videos(4))))
+        repository.enqueueShorts(UiState.Success(shorts(2)))
+        repository.enqueuePage(UiState.Error("Не вдалося завантажити стрічку"))
+
         val viewModel = createViewModel()
-        assertThat(viewModel.uiState.value).isEqualTo(UiState.Loading)
+        advanceUntilIdle()
+        viewModel.loadMore()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.items.filterIsInstance<FeedItem.Video>()).hasSize(4)
+        assertThat(viewModel.uiState.value.loadMoreError).isEqualTo("Не вдалося завантажити стрічку")
+        assertThat(viewModel.uiState.value.loadingMore).isFalse()
     }
+
+    @Test
+    fun `topic change resets items and loads the new topic`() = runTest(testDispatcher) {
+        repository.enqueuePage(UiState.Success(FeedPage(videos(4))))
+        repository.enqueueShorts(UiState.Success(shorts(2)))
+        repository.enqueuePage(UiState.Success(FeedPage(emptyList())))
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.selectTopic(FeedTopic.GAMES)
+        advanceUntilIdle()
+
+        assertThat(repository.lastTopic).isEqualTo(FeedTopic.GAMES)
+        assertThat(viewModel.uiState.value.topic).isEqualTo(FeedTopic.GAMES)
+        assertThat(viewModel.uiState.value.items).isEmpty()
+    }
+
+    @Test
+    fun `sort change reloads and keeps the selected topic`() = runTest(testDispatcher) {
+        repository.enqueuePage(UiState.Success(FeedPage(emptyList())))
+        repository.enqueuePage(UiState.Success(FeedPage(emptyList())))
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.selectTopic(FeedTopic.TECH)
+        advanceUntilIdle()
+        viewModel.selectSort(FeedSort.POPULAR)
+        advanceUntilIdle()
+
+        assertThat(repository.lastSort).isEqualTo(FeedSort.POPULAR)
+        assertThat(repository.lastTopic).isEqualTo(FeedTopic.TECH)
+        assertThat(viewModel.uiState.value.sort).isEqualTo(FeedSort.POPULAR)
+    }
+
+    @Test
+    fun `initial error is exposed with the message`() = runTest(testDispatcher) {
+        repository.enqueuePage(UiState.Error("Не вдалося завантажити стрічку"))
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.error).isEqualTo("Не вдалося завантажити стрічку")
+        assertThat(viewModel.uiState.value.loading).isFalse()
+    }
+
+    @Test
+    fun `block without shorts is removed when the shorts request fails`() =
+        runTest(testDispatcher) {
+            repository.enqueuePage(UiState.Success(FeedPage(videos(4))))
+            repository.enqueueShorts(UiState.Error("Не вдалося завантажити шортси"))
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            assertThat(viewModel.uiState.value.items.filterIsInstance<FeedItem.ShortsBlock>()).isEmpty()
+            assertThat(viewModel.uiState.value.items.filterIsInstance<FeedItem.Video>()).hasSize(4)
+        }
 }

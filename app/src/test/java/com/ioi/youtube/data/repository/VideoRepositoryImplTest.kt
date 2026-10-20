@@ -7,7 +7,6 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import com.ioi.youtube.data.local.CachedVideoDao
 import com.ioi.youtube.data.local.CachedVideoDetailsDao
-import com.ioi.youtube.data.local.CachedVideoEntity
 import com.ioi.youtube.data.local.CachedVideoDetailsEntity
 import com.ioi.youtube.data.local.IOIDatabase
 import com.ioi.youtube.data.mapper.toDetailsEntity
@@ -50,66 +49,6 @@ class VideoRepositoryImplTest {
 
     @After
     fun tearDown() = database.close()
-
-    @Test
-    fun `home feed emits cached then fresh`() = runTest {
-        remote.feed = listOf(rawVideo("fresh1"))
-        videoDao.replaceSource(VideoRepositoryImpl.SOURCE_HOME, listOf(videoEntity("cached1")))
-
-        repository.getHomeFeed().test {
-            assertThat(awaitItem()).isEqualTo(UiState.Loading)
-
-            val cached = awaitItem() as UiState.Success
-            assertThat(cached.data.map { it.id }).containsExactly("cached1")
-            assertThat(cached.fromCache).isTrue()
-
-            val fresh = awaitItem() as UiState.Success
-            assertThat(fresh.data.map { it.id }).containsExactly("fresh1")
-            assertThat(fresh.fromCache).isFalse()
-
-            awaitComplete()
-        }
-    }
-
-    @Test
-    fun `home feed persists fresh data to cache`() = runTest {
-        remote.feed = listOf(rawVideo("fresh1"), rawVideo("fresh2"))
-
-        repository.getHomeFeed().test {
-            awaitItem()
-            awaitItem()
-            awaitComplete()
-        }
-
-        assertThat(videoDao.getBySource(VideoRepositoryImpl.SOURCE_HOME).map { it.id })
-            .containsExactly("fresh1", "fresh2")
-    }
-
-    @Test
-    fun `home feed emits error when network fails and cache is empty`() = runTest {
-        remote.feedError = IOException("offline")
-
-        repository.getHomeFeed().test {
-            assertThat(awaitItem()).isEqualTo(UiState.Loading)
-            val error = awaitItem() as UiState.Error
-            assertThat(error.message).isEqualTo(VideoRepositoryImpl.ERROR_LOAD_FEED)
-            awaitComplete()
-        }
-    }
-
-    @Test
-    fun `home feed shows cache without error when network fails`() = runTest {
-        remote.feedError = IOException("offline")
-        videoDao.replaceSource(VideoRepositoryImpl.SOURCE_HOME, listOf(videoEntity("cached1")))
-
-        repository.getHomeFeed().test {
-            assertThat(awaitItem()).isEqualTo(UiState.Loading)
-            val cached = awaitItem() as UiState.Success
-            assertThat(cached.data.map { it.id }).containsExactly("cached1")
-            assertThat(cached.fromCache).isTrue()
-            awaitComplete()
-        }
-    }
 
     @Test
     fun `video details caches fresh details`() = runTest {
@@ -172,18 +111,6 @@ class VideoRepositoryImplTest {
         durationSeconds = 60,
         viewCount = 100,
         uploadDate = null,
-    )
-
-    private fun videoEntity(id: String) = CachedVideoEntity(
-        id = id,
-        sourceKey = VideoRepositoryImpl.SOURCE_HOME,
-        title = "Cached $id",
-        uploaderName = "Channel",
-        thumbnailUrl = "https://example.com/$id.jpg",
-        durationSeconds = 60,
-        viewCount = 100,
-        uploadDate = null,
-        cachedAt = 10L,
     )
 
     private fun rawDetails(id: String) = RawVideoDetails(

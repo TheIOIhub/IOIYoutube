@@ -15,20 +15,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 class FakeVideoRepository : VideoRepository {
 
-    private val feed = MutableStateFlow<UiState<List<VideoSummary>>>(UiState.Loading)
     private val details = mutableMapOf<String, MutableStateFlow<UiState<VideoDetails>>>()
     private val streams = mutableMapOf<String, MutableStateFlow<UiState<VideoStream>>>()
 
-    var feedCalls = 0
-        private set
     var detailsCalls = 0
         private set
     var streamCalls = 0
         private set
-
-    fun setFeed(state: UiState<List<VideoSummary>>) {
-        feed.value = state
-    }
 
     fun setDetails(videoId: String, state: UiState<VideoDetails>) {
         details.getOrPut(videoId) { MutableStateFlow(state) }.value = state
@@ -36,11 +29,6 @@ class FakeVideoRepository : VideoRepository {
 
     fun setStream(videoId: String, state: UiState<VideoStream>) {
         streams.getOrPut(videoId) { MutableStateFlow(state) }.value = state
-    }
-
-    override fun getHomeFeed(): Flow<UiState<List<VideoSummary>>> {
-        feedCalls++
-        return feed
     }
 
     override fun getVideoDetails(videoId: String): Flow<UiState<VideoDetails>> {

@@ -56,6 +56,7 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
                     onVideoClick = { videoId ->
                         navController.navigate(Routes.player(videoId))
                     },
+                    onShortClick = { navController.navigate(Routes.SHORTS) },
                 )
             }
             composable(Routes.SEARCH) {
