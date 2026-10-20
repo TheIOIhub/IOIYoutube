@@ -1,9 +1,13 @@
 package com.ioi.youtube.presentation.navigation
 
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import com.google.common.truth.Truth.assertThat
 import com.ioi.youtube.presentation.theme.IOITubeTheme
 import org.junit.Rule
@@ -70,5 +74,33 @@ class IOITubeBottomBarTest {
         composeRule.onNodeWithContentDescription("Головна").assertExists()
         composeRule.onNodeWithContentDescription("Shorts").assertExists()
         composeRule.onNodeWithContentDescription("Пошук").assertExists()
+    }
+
+    @Test
+    fun `bar is 56dp tall and icons are 24dp inside a 48dp touch target`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                IOITubeBottomBar(currentRoute = Routes.HOME, onNavigate = {})
+            }
+        }
+
+        val bar = composeRule.onRoot().getUnclippedBoundsInRoot()
+        val icon = composeRule
+            .onNodeWithContentDescription("Головна", useUnmergedTree = true)
+            .getUnclippedBoundsInRoot()
+        val tab = composeRule
+            .onNodeWithContentDescription("Головна")
+            .getUnclippedBoundsInRoot()
+
+        // Смуга не має розростатися до 80dp, як стандартний NavigationBar.
+        assertThat(bar.height.value).isEqualTo(56f)
+        // Іконка мусить мати реальний розмір: зайвий padding колись стискав її до 0dp.
+        assertThat(icon.height.value).isEqualTo(24f)
+        assertThat(icon.width.value).isEqualTo(24f)
+        // Площа дотику — не менше 48dp за Material guidelines.
+        assertThat(tab.height.value).isAtLeast(48f)
+        // Іконка відцентрована по вертикалі в пігулці.
+        val expectedTop = tab.top.value + (tab.height.value - icon.height.value) / 2f
+        assertThat(icon.top.value).isWithin(0.5f).of(expectedTop)
     }
 }
