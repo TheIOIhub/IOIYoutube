@@ -3,10 +3,12 @@ package com.ioi.youtube.di
 import com.ioi.youtube.data.remote.NewPipeRemoteDataSource
 import com.ioi.youtube.data.remote.YouTubeRemoteDataSource
 import com.ioi.youtube.data.repository.CommentRepositoryImpl
+import com.ioi.youtube.data.repository.FeedRepositoryImpl
 import com.ioi.youtube.data.repository.ShortsRepositoryImpl
 import com.ioi.youtube.data.repository.SearchRepositoryImpl
 import com.ioi.youtube.data.repository.VideoRepositoryImpl
 import com.ioi.youtube.domain.repository.CommentRepository
+import com.ioi.youtube.domain.repository.FeedRepository
 import com.ioi.youtube.domain.repository.ShortsRepository
 import com.ioi.youtube.domain.repository.SearchRepository
 import com.ioi.youtube.domain.repository.VideoRepository
@@ -23,6 +25,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindVideoRepository(impl: VideoRepositoryImpl): VideoRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindFeedRepository(impl: FeedRepositoryImpl): FeedRepository
 
     @Binds
     @Singleton
