@@ -15,6 +15,7 @@ import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.downloader.Downloader
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+import kotlin.random.Random
 
 private const val DATABASE_NAME = "ioitube.db"
 
@@ -32,6 +33,11 @@ object DataModule {
     @Provides
     @Singleton
     fun provideDownloader(client: OkHttpClient): Downloader = OkHttpDownloader(client)
+
+    /** Джерело випадковості для пулiв запитiв стрiчки; тести пiдставляють Random(seed). */
+    @Provides
+    @Singleton
+    fun provideRandom(): Random = Random.Default
 
     @Provides
     @Singleton

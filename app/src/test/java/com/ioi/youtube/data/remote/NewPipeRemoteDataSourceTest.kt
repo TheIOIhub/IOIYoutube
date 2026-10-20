@@ -1,6 +1,7 @@
 package com.ioi.youtube.data.remote
 
 import com.google.common.truth.Truth.assertThat
+import com.ioi.youtube.domain.model.FeedTopic
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -28,6 +29,7 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.StreamType
 import org.schabi.newpipe.extractor.stream.VideoStream
 import java.io.IOException
+import kotlin.random.Random
 
 /**
  * Контракт роботи з NewPipe без мережi.
@@ -65,6 +67,9 @@ class NewPipeRemoteDataSourceTest {
 
     private fun homeItem(id: String, uploaderUrl: String): StreamInfoItem =
         item(id, "Home $id").apply { this.uploaderUrl = uploaderUrl }
+
+    private fun shortItem(id: String, channelUrl: String): StreamInfoItem =
+        homeItem(id, channelUrl).apply { isShortFormContent = true }
 
     private fun channelExtractor(vararg tabUrls: String): ChannelExtractor {
         val extractor = mockk<ChannelExtractor>(relaxed = true)
@@ -114,54 +119,104 @@ class NewPipeRemoteDataSourceTest {
     }
 
     @Test
-    fun `home feed searches every category, fetches pages first and interleaves results`() = runTest {
-        val music = searchExtractor(listOf(item("aaaaaaaaaaa", "Music"), item("bbbbbbbbbbb", "Shared")))
-        val games = searchExtractor(listOf(item("ccccccccccc", "Game"), item("bbbbbbbbbbb", "Shared")))
-        val empty = searchExtractor()
+    fun `feed page searches with a query from the topic pool`() = runTest {
+        val search = searchExtractor(listOf(item("aaaaaaaaaaa", "Game")))
         val service = mockk<StreamingService>(relaxed = true)
-        every { service.getSearchExtractor(any<String>()) } returns empty
-        every { service.getSearchExtractor("музика") } returns music
-        every { service.getSearchExtractor("ігри") } returns games
+        val asked = slot<String>()
+        every { service.getSearchExtractor(capture(asked)) } returns search
         stubYouTubeService(service)
 
-        val feed = NewPipeRemoteDataSource().fetchHomeFeed()
+        val page = NewPipeRemoteDataSource(Random(1)).fetchFeedPage(FeedTopic.GAMES)
 
-        // Чергування категорiй + прибранi дублiкати.
-        assertThat(feed.map { it.id }).containsExactly("aaaaaaaaaaa", "ccccccccccc", "bbbbbbbbbbb").inOrder()
-        assertThat(feed.map { it.title }).containsExactly("Music", "Game", "Shared").inOrder()
-        for (category in NewPipeRemoteDataSource.FEED_CATEGORIES) {
-            verify(exactly = 1) { service.getSearchExtractor(category) }
-        }
-        verifyOrder { music.fetchPage(); music.initialPage }
-        verifyOrder { games.fetchPage(); games.initialPage }
-        verifyOrder { empty.fetchPage(); empty.initialPage }
+        assertThat(page.map { it.id }).containsExactly("aaaaaaaaaaa")
+        assertThat(asked.captured).isIn(TOPIC_QUERIES.getValue(FeedTopic.GAMES))
+        verifyOrder { search.fetchPage(); search.initialPage }
     }
 
     @Test
-    fun `home feed keeps working when some categories fail`() = runTest {
-        val music = searchExtractor(listOf(item("aaaaaaaaaaa", "Music")))
+    fun `all feed page uses two different queries and drops duplicates`() = runTest {
+        val search = searchExtractor(listOf(item("aaaaaaaaaaa", "A"), item("bbbbbbbbbbb", "B")))
         val service = mockk<StreamingService>(relaxed = true)
-        every { service.getSearchExtractor(any<String>()) } returns
-            searchExtractor(failWith = IOException("offline"))
-        every { service.getSearchExtractor("музика") } returns music
+        val asked = mutableListOf<String>()
+        every { service.getSearchExtractor(capture(asked)) } returns search
         stubYouTubeService(service)
 
-        val feed = NewPipeRemoteDataSource().fetchHomeFeed()
+        val page = NewPipeRemoteDataSource(Random(2)).fetchFeedPage(FeedTopic.ALL)
 
-        assertThat(feed.map { it.id }).containsExactly("aaaaaaaaaaa")
+        assertThat(asked).hasSize(2)
+        assertThat(asked.toSet()).hasSize(2)
+        assertThat(page.map { it.id }).containsExactly("aaaaaaaaaaa", "bbbbbbbbbbb")
     }
 
     @Test
-    fun `home feed reports failure when every category fails`() = runTest {
+    fun `feed page reports failure when every query fails`() = runTest {
         val service = mockk<StreamingService>(relaxed = true)
         every { service.getSearchExtractor(any<String>()) } returns
             searchExtractor(failWith = IOException("offline"))
         stubYouTubeService(service)
 
-        val thrown = runCatching { NewPipeRemoteDataSource().fetchHomeFeed() }.exceptionOrNull()
+        val thrown = runCatching {
+            NewPipeRemoteDataSource(Random(1)).fetchFeedPage(FeedTopic.NEWS)
+        }.exceptionOrNull()
 
         assertThat(thrown).isInstanceOf(IOException::class.java)
         assertThat(thrown).hasMessageThat().isEqualTo("offline")
+    }
+
+    @Test
+    fun `feed shorts take at most one short per channel`() = runTest {
+        val tab1 = shortsTab(
+            listOf(
+                shortItem("s1111111111", "https://www.youtube.com/UC1"),
+                shortItem("s2222222222", "https://www.youtube.com/UC1"),
+            ),
+        )
+        val tab2 = shortsTab(
+            listOf(
+                shortItem("s3333333333", "https://www.youtube.com/UC2"),
+                shortItem("s4444444444", "https://www.youtube.com/UC2"),
+            ),
+        )
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns searchExtractor(
+            listOf(
+                homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC1"),
+                homeItem("iiiiiiiiiii", "https://www.youtube.com/UC2"),
+            ),
+        )
+        every { service.getChannelExtractor("https://www.youtube.com/UC1") } returns
+            channelExtractor("https://www.youtube.com/UC1/shorts")
+        every { service.getChannelExtractor("https://www.youtube.com/UC2") } returns
+            channelExtractor("https://www.youtube.com/UC2/shorts")
+        every { service.getChannelTabExtractor(match { it.url.contains("UC1") }) } returns tab1
+        every { service.getChannelTabExtractor(match { it.url.contains("UC2") }) } returns tab2
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource(Random(3))
+            .fetchFeedShorts(count = 2, excludeIds = emptySet())
+
+        assertThat(shorts).hasSize(2)
+        assertThat(shorts.map { it.uploaderUrl })
+            .containsExactly("https://www.youtube.com/UC1", "https://www.youtube.com/UC2")
+        assertThat(shorts.map { it.id }.toSet()).hasSize(2)
+    }
+
+    @Test
+    fun `feed shorts skip excluded ids`() = runTest {
+        val tab = shortsTab(listOf(shortItem("s1111111111", "https://www.youtube.com/UC1")))
+        val service = mockk<StreamingService>(relaxed = true)
+        every { service.getSearchExtractor(any<String>()) } returns searchExtractor(
+            listOf(homeItem("hhhhhhhhhhh", "https://www.youtube.com/UC1")),
+        )
+        every { service.getChannelExtractor(any<String>()) } returns
+            channelExtractor("https://www.youtube.com/UC1/shorts")
+        every { service.getChannelTabExtractor(any()) } returns tab
+        stubYouTubeService(service)
+
+        val shorts = NewPipeRemoteDataSource(Random(4))
+            .fetchFeedShorts(count = 2, excludeIds = setOf("s1111111111"))
+
+        assertThat(shorts).isEmpty()
     }
 
     @Test

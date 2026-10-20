@@ -4,6 +4,7 @@ import com.ioi.youtube.data.model.RawComment
 import com.ioi.youtube.data.model.RawVideoDetails
 import com.ioi.youtube.data.model.RawVideoStream
 import com.ioi.youtube.data.model.RawVideoSummary
+import com.ioi.youtube.domain.model.FeedTopic
 import com.ioi.youtube.util.HtmlText
 import com.ioi.youtube.util.YouTubeUrlParser
 import kotlinx.coroutines.Dispatchers
@@ -22,38 +23,45 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.VideoStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.random.Random
 
 /**
  * Реалізація YouTubeRemoteDataSource на NewPipe Extractor 0.26.5.
  * NewPipe повертає посилання на відеопотік без рекламних сегментiв (спека §1).
  */
 @Singleton
-class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
+class NewPipeRemoteDataSource @Inject constructor(
+    private val random: Random,
+) : YouTubeRemoteDataSource {
+
+    /** Production-конструктор: Hilt не вмiє типiзувати default-параметри (бачить два `@Inject`). */
+    constructor() : this(Random.Default)
 
     private val youtube: StreamingService
         get() = NewPipe.getService(ServiceList.YouTube.serviceId)
 
     /**
-     * Стрiчка «Головна».
+     * Сторінка стрічки «Головна».
      *
      * У NewPipeExtractor 0.26.5 (i в master) кiоск `Trending` зламаний: YouTube вiдповiдає
      * HTTP 400 на browse-запит `FEtrending`, а анонiмна домашня стрiчка YouTube
      * (`FEwhat_to_watch`) порожня за задумом. Тому стрiчку збираємо самi — паралельними
-     * пошуковими запитами за категорiями, чергуючи результати (щоб категорiї перемiшувались).
+     * пошуковими запитами з пулiв теми, чергуючи результати (щоб теми перемiшувались).
      */
-    override suspend fun fetchHomeFeed(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
-        val pages = coroutineScope {
-            FEED_CATEGORIES.map { category ->
-                async { runCatching { searchPage(category) } }
-            }.awaitAll()
+    override suspend fun fetchFeedPage(topic: FeedTopic): List<RawVideoSummary> =
+        withContext(Dispatchers.IO) {
+            val pages = coroutineScope {
+                queriesFor(topic, random)
+                    .map { query -> async { runCatching { searchPage(query) } } }
+                    .awaitAll()
+            }
+            val loaded = pages.mapNotNull { it.getOrNull() }
+            if (loaded.isEmpty()) {
+                // Жоден запит не завантажився — віддаємо помилку вгору (репозиторiй покаже її/кеш).
+                throw pages.firstNotNullOf { it.exceptionOrNull() }
+            }
+            loaded.interleave().distinctBy { it.id }.take(FEED_PAGE_SIZE)
         }
-        val loaded = pages.mapNotNull { it.getOrNull() }
-        if (loaded.isEmpty()) {
-            // Жодна категорiя не завантажилась — віддаємо помилку вгору (репозиторiй покаже її/кеш).
-            throw pages.firstNotNullOf { it.exceptionOrNull() }
-        }
-        loaded.interleave().distinctBy { it.id }.take(FEED_SIZE)
-    }
 
     override suspend fun search(query: String): List<RawVideoSummary> = withContext(Dispatchers.IO) {
         searchPage(query)
@@ -113,30 +121,53 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         }
 
     override suspend fun fetchShorts(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
-        shortsFromChannels(channelsFrom(fetchHomeFeed()))
+        shortsFromChannels(channelsFrom(fetchFeedPage(FeedTopic.ALL)))
     }
 
     override suspend fun fetchMoreShorts(): List<RawVideoSummary> = withContext(Dispatchers.IO) {
         // Iнша тема → iншi канали → iншi шортси: стрiчка не закiнчується.
-        shortsFromChannels(channelsFrom(search(SHORTS_QUERIES.random())))
+        shortsFromChannels(channelsFrom(search(SHORTS_QUERIES.random(random))))
     }
 
+    override suspend fun fetchFeedShorts(
+        count: Int,
+        excludeIds: Set<String>,
+    ): List<RawVideoSummary> = withContext(Dispatchers.IO) {
+        if (count <= 0) return@withContext emptyList()
+        val channels = channelsFrom(search(SHORTS_QUERIES.random(random)))
+        shortsFromChannels(channels, limit = count, excludeIds = excludeIds)
+    }
+
+    /** Випадкові канали з відео; максимум [SHORTS_CHANNEL_LIMIT]. */
     private fun channelsFrom(videos: List<RawVideoSummary>): List<String> =
         videos.mapNotNull { it.uploaderUrl.takeIf(String::isNotBlank) }
             .distinct()
+            .shuffled(random)
             .take(SHORTS_CHANNEL_LIMIT)
 
-    private suspend fun shortsFromChannels(channels: List<String>): List<RawVideoSummary> {
+    /**
+     * Рівно один випадковий шортс з каналу — щоб один канал не займав усю стрічку.
+     * Помилки окремих каналів не ховають результати інших.
+     */
+    private suspend fun shortsFromChannels(
+        channels: List<String>,
+        limit: Int = Int.MAX_VALUE,
+        excludeIds: Set<String> = emptySet(),
+    ): List<RawVideoSummary> {
         if (channels.isEmpty()) return emptyList()
         val pages = coroutineScope {
             channels.map { channel -> async { runCatching { shortsOfChannel(channel) } } }.awaitAll()
         }
         val loaded = pages.mapNotNull { it.getOrNull() }
         if (loaded.isEmpty()) {
-            // Жоден канал не завантажився — віддаємо помилку вгору, як у fetchHomeFeed.
+            // Жоден канал не завантажився — віддаємо помилку вгору, як у fetchFeedPage.
             throw pages.firstNotNullOf { it.exceptionOrNull() }
         }
-        return loaded.flatten().distinctBy { it.id }.shuffled()
+        return loaded
+            .mapNotNull { shorts -> shorts.filterNot { it.id in excludeIds }.randomOrNull(random) }
+            .distinctBy { it.id }
+            .shuffled(random)
+            .take(limit)
     }
 
     /** Вкладка Shorts каналу; канал без неї дає порожнiй список. */
@@ -199,7 +230,7 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
         else -> content.orEmpty()
     }
 
-    /** Чергує сторiнки категорiй, щоб у стрiчцi сусiднi вiдео були з рiзних категорiй. */
+    /** Чергує сторiнки запитiв, щоб у стрiчцi сусiднi вiдео були з рiзних тем. */
     private fun List<List<RawVideoSummary>>.interleave(): List<RawVideoSummary> {
         val merged = mutableListOf<RawVideoSummary>()
         val longest = maxOfOrNull { it.size } ?: 0
@@ -210,17 +241,11 @@ class NewPipeRemoteDataSource @Inject constructor() : YouTubeRemoteDataSource {
     }
 
     companion object {
-        /** Скільки вiдео показуємо на «Головнiй». */
-        internal const val FEED_SIZE = 30
-
-        /**
-         * Категорiї стрiчки (аналог YouTube Explore): кiоск Trending недоступний,
-         * тому кожна категорiя — окремий пошуковий запит.
-         */
-        internal val FEED_CATEGORIES = listOf("музика", "ігри", "спорт", "фільми", "технології")
+        /** Скiльки вiдео у вiдповiдi на одну сторiнку стрiчки. */
+        internal const val FEED_PAGE_SIZE = 20
 
         /** Скiльки каналiв тягнемо для стрiчки Shorts. */
-        internal const val SHORTS_CHANNEL_LIMIT = 6
+        internal const val SHORTS_CHANNEL_LIMIT = 10
 
         /** Ознака вкладки Shorts у списку вкладок каналу. */
         internal const val SHORTS_TAB_MARKER = "/shorts"

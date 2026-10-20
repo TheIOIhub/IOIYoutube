@@ -2,6 +2,7 @@ package com.ioi.youtube.data.remote
 
 import com.ioi.youtube.data.extractor.ExtractorInitializer
 import com.ioi.youtube.data.extractor.OkHttpDownloader
+import com.ioi.youtube.domain.model.FeedTopic
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -33,7 +34,7 @@ class NewPipeRemoteDataSourceSmokeTest {
         val dataSource = NewPipeRemoteDataSource()
 
         val feedStart = System.currentTimeMillis()
-        val feed = dataSource.fetchHomeFeed()
+        val feed = dataSource.fetchFeedPage(FeedTopic.ALL)
         val feedMillis = System.currentTimeMillis() - feedStart
 
         val search = dataSource.search("kotlin")

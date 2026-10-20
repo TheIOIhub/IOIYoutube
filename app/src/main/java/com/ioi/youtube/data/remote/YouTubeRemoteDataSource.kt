@@ -4,6 +4,7 @@ import com.ioi.youtube.data.model.RawComment
 import com.ioi.youtube.data.model.RawVideoDetails
 import com.ioi.youtube.data.model.RawVideoStream
 import com.ioi.youtube.data.model.RawVideoSummary
+import com.ioi.youtube.domain.model.FeedTopic
 
 /**
  * Єдине джерело даних із YouTube. Розриває залежність UI/репозиторіїв від NewPipe,
@@ -11,7 +12,12 @@ import com.ioi.youtube.data.model.RawVideoSummary
  * Усі методи блокують потік — викликати лише з Dispatchers.IO.
  */
 interface YouTubeRemoteDataSource {
-    suspend fun fetchHomeFeed(): List<RawVideoSummary>
+    /** Одна сторінка стрічки для теми (для `ALL` — суміш двох тем). */
+    suspend fun fetchFeedPage(topic: FeedTopic): List<RawVideoSummary>
+
+    /** До `count` шортсів, максимум один з каналу, без `excludeIds`. */
+    suspend fun fetchFeedShorts(count: Int, excludeIds: Set<String>): List<RawVideoSummary>
+
     suspend fun search(query: String): List<RawVideoSummary>
     suspend fun fetchVideoDetails(videoId: String): RawVideoDetails
     suspend fun fetchComments(videoId: String): List<RawComment>

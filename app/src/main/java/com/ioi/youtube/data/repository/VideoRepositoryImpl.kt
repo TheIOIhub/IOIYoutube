@@ -7,6 +7,7 @@ import com.ioi.youtube.data.mapper.toDetailsEntity
 import com.ioi.youtube.data.mapper.toDomain
 import com.ioi.youtube.data.mapper.toEntity
 import com.ioi.youtube.data.remote.YouTubeRemoteDataSource
+import com.ioi.youtube.domain.model.FeedTopic
 import com.ioi.youtube.domain.model.UiState
 import com.ioi.youtube.domain.model.VideoDetails
 import com.ioi.youtube.domain.model.VideoStream
@@ -41,7 +42,8 @@ class VideoRepositoryImpl @Inject constructor(
             emit(UiState.Success(cached.map { it.toDomain() }, fromCache = true))
         }
         val fresh = try {
-            remote.fetchHomeFeed()
+            // Тимчасово, до Task 4: стара стрiчка = перша сторiнка теми «Усi».
+            remote.fetchFeedPage(FeedTopic.ALL)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
