@@ -47,6 +47,8 @@ class NewPipeRemoteDataSourceSmokeTest {
         check(stream.url.isNotBlank()) { "stream url порожнiй" }
         check(details.title.isNotBlank()) { "details title порожнiй" }
         check(comments.isNotEmpty()) { "comments порожнi" }
+        check(stream.videoOnly.isNotEmpty()) { "немає video-only доріжок" }
+        check(stream.audioTracks.isNotEmpty()) { "немає аудіодоріжок" }
 
         // YouTube вiддає опис/коментарi як HTML — у UI не має лишитись тегiв i сутностей.
         check(!details.description.contains("<a href") && !details.description.contains("&amp;")) {
@@ -90,5 +92,17 @@ class NewPipeRemoteDataSourceSmokeTest {
 
         println("live shorts: n=${shorts.size} (${shortsMillis} ms), hls variants=$variants")
         println("live shorts sample: " + shorts.take(5).joinToString(" | ") { it.title.take(40) })
+    }
+
+    @Test
+    fun `video with dubs exposes original and translated audio tracks`() = runBlocking {
+        assumeTrue("IOITUBE_LIVE_TESTS=1 не встановлено — живий тест пропущено", live)
+
+        ExtractorInitializer(OkHttpDownloader(client())).init()
+        val stream = NewPipeRemoteDataSource().fetchVideoStream("FjcO19YTvD8")
+
+        check(stream.audioTracks.size > 1) { "очікували кілька доріжок, отримали ${stream.audioTracks.size}" }
+        check(stream.audioTracks.any { it.original }) { "немає оригінальної доріжки" }
+        check(stream.videoOnly.any { it.height >= 720 }) { "немає video-only ≥720p" }
     }
 }
