@@ -21,8 +21,8 @@ android {
         applicationId = "com.ioi.youtube"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -54,6 +54,10 @@ android {
     }
 
     compileOptions {
+        // NewPipe Extractor 0.26.x uses Java 11 APIs such as
+        // URLEncoder.encode(String, Charset) (Android 13+). The _nio variant
+        // backports java.net/java.nio so minSdk 26 devices keep working.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -72,6 +76,8 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
+
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
