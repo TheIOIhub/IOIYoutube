@@ -98,20 +98,18 @@ class VideoPlayerTest {
     }
 
     @Test
-    fun `audio section is shown only with more than one track`() {
+    fun `audio button is shown only with more than one track`() {
         show(audioOptions = listOf(english, ukrainian))
 
-        composeRule.onNodeWithContentDescription("Налаштування").performClick()
-        composeRule.onNodeWithText("Аудіо").assertExists()
+        composeRule.onNodeWithContentDescription("Аудіодоріжка").performClick()
         composeRule.onNodeWithText("Українська · дубляж").assertExists()
     }
 
     @Test
-    fun `single audio track hides the audio section`() {
+    fun `single audio track hides the audio button`() {
         show(audioOptions = listOf(ukrainian), selectedAudio = ukrainian)
 
-        composeRule.onNodeWithContentDescription("Налаштування").performClick()
-        composeRule.onNodeWithText("Аудіо").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Аудіодоріжка").assertDoesNotExist()
     }
 
     @Test
@@ -119,19 +117,27 @@ class VideoPlayerTest {
         var selected: AudioTrackOption? = null
         show(onSelectAudio = { selected = it })
 
-        composeRule.onNodeWithContentDescription("Налаштування").performClick()
+        composeRule.onNodeWithContentDescription("Аудіодоріжка").performClick()
         composeRule.onNodeWithText("Українська · дубляж").performClick()
 
         assertThat(selected).isEqualTo(ukrainian)
     }
 
     @Test
-    fun `scale item reports fill`() {
+    fun `quality menu does not mix in audio tracks`() {
+        show()
+
+        composeRule.onNodeWithContentDescription("Якість").performClick()
+        composeRule.onNodeWithText("Авто (HLS)").assertExists()
+        composeRule.onNodeWithText("Українська · дубляж").assertDoesNotExist()
+    }
+
+    @Test
+    fun `scale button reports fill`() {
         var scale: VideoScale? = null
         show(onScaleChange = { scale = it })
 
-        composeRule.onNodeWithContentDescription("Налаштування").performClick()
-        composeRule.onNodeWithText("Заповнити").performClick()
+        composeRule.onNodeWithContentDescription("Заповнити екран").performClick()
 
         assertThat(scale).isEqualTo(VideoScale.FILL)
     }
