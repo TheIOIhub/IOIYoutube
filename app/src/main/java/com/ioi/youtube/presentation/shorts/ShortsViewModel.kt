@@ -14,6 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.update
@@ -115,15 +116,20 @@ class ShortsViewModel @Inject constructor(
     /**
      * Новi шортси з iншої теми; помилка «гортання далi» не руйнує поточну стрiчку.
      *
-     * [take] обмежує передплату першим елемiнтом: так збирателю гарантовано вiдбудеться
-     * (як отримано данi, так i якщо потiк завершився), а iнакше корутина бiла б зависла на
-     * каналi [ShortsRepository.getMoreShorts()] i ніколи не скинула б [ShortsUiState.loadingMore].
+     * [dropWhile] вiдкидає провiдний [UiState.Loading] репозиторiю: [take] обмежує передплату
+     * першим змiстовним елементом (Success або Error). Без цього [take] захопив би саме Loading,
+     * скасував запит i стрiчка назавжди лишалася б на початковiй порцiї.
+     *
+     * [take] також гарантує завершення збирача (як отримано данi, так i якщо потiк завершився),
+     * а iнакше корутина бiла б зависла на каналi [ShortsRepository.getMoreShorts()]
+     * i ніколи не скинула б [ShortsUiState.loadingMore].
      */
     fun loadMore() {
         if (uiState.value.loadingMore) return
         uiState.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
             getMoreShorts()
+                .dropWhile { it is UiState.Loading }
                 .take(1)
                 .collect { state ->
                     if (state is UiState.Success) {

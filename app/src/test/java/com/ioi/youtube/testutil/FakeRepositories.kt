@@ -84,6 +84,9 @@ class FakeShortsRepository : ShortsRepository {
     private val shorts = MutableStateFlow<UiState<List<VideoSummary>>>(UiState.Loading)
     private val moreShorts = MutableStateFlow<UiState<List<VideoSummary>>>(UiState.Loading)
 
+    /** Перекриває [moreShorts], коли тесту потрiбен холодний потiк iз кiлькома емiсiями. */
+    var moreShortsFlow: Flow<UiState<List<VideoSummary>>>? = null
+
     var shortsCalls = 0
         private set
     var moreShortsCalls = 0
@@ -104,6 +107,6 @@ class FakeShortsRepository : ShortsRepository {
 
     override fun getMoreShorts(): Flow<UiState<List<VideoSummary>>> {
         moreShortsCalls++
-        return moreShorts
+        return moreShortsFlow ?: moreShorts
     }
 }

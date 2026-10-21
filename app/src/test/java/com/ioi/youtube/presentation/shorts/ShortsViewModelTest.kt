@@ -14,6 +14,7 @@ import com.ioi.youtube.testutil.FakeVideoRepository
 import com.ioi.youtube.testutil.TestData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -132,6 +133,31 @@ class ShortsViewModelTest {
 
             assertThat(viewModel.uiState.value.shorts)
                 .isEqualTo(UiState.Success(listOf(first, second, third)))
+            assertThat(viewModel.uiState.value.loadingMore).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `load more skips the repository loading emission`() = runTest(testDispatcher) {
+        val first = TestData.video("aaaaaaaaaaa")
+        val second = TestData.video("bbbbbbbbbbb")
+        shorts.setShorts(UiState.Success(listOf(first)))
+        // Реальний ShortsRepositoryImpl спершу емiтить Loading, потiм данi.
+        shorts.moreShortsFlow = flow {
+            emit(UiState.Loading)
+            emit(UiState.Success(listOf(second)))
+        }
+        val viewModel = createViewModel()
+
+        viewModel.uiState.test {
+            advanceUntilIdle()
+
+            viewModel.loadMore()
+            advanceUntilIdle()
+
+            assertThat(viewModel.uiState.value.shorts)
+                .isEqualTo(UiState.Success(listOf(first, second)))
             assertThat(viewModel.uiState.value.loadingMore).isFalse()
             cancelAndIgnoreRemainingEvents()
         }
