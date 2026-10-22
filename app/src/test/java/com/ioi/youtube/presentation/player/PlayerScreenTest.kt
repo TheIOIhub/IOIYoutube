@@ -1,6 +1,7 @@
 package com.ioi.youtube.presentation.player
 
 import android.content.Context
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
@@ -366,6 +367,38 @@ class PlayerScreenTest {
 
         composeRule.onNodeWithTag("player-container").performTouchInput {
             swipeDown(startY = height * 0.1f, endY = height * 0.25f, durationMillis = 300)
+        }
+        composeRule.waitForIdle()
+
+        assertThat(minimized).isFalse()
+    }
+
+    @Test
+    fun `second pointer cancels the minimize gesture`() {
+        var minimized = false
+
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = successState(),
+                    onVideoClick = {},
+                    onRetry = {},
+                    holder = holder(),
+                    onMinimize = { minimized = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("player-container").performTouchInput {
+            val x = centerX
+            down(0, Offset(x, height * 0.1f))
+            moveTo(0, Offset(x, height * 0.6f))
+            // Другий палець посеред протягування скасовує згортання.
+            down(1, Offset(x + 40f, height * 0.6f))
+            moveTo(0, Offset(x, height * 0.9f))
+            moveTo(1, Offset(x + 40f, height * 0.9f))
+            up(0)
+            up(1)
         }
         composeRule.waitForIdle()
 

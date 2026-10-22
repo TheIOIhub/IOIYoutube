@@ -14,6 +14,24 @@ internal const val MINIMIZE_DRAG_FRACTION = 0.30f
 internal fun shouldMinimize(dragPx: Float, heightPx: Float): Boolean =
     heightPx > 0f && dragPx >= heightPx * MINIMIZE_DRAG_FRACTION
 
+/** Що робити після відпускання протягування: згорнути плеєр чи повернути на місце. */
+internal enum class MinimizeRelease { MINIMIZE, SETTLE }
+
+/**
+ * Багатопальцевий жест (наприклад, початок пінчу) завжди повертає відео на місце,
+ * навіть якщо протягування вже перевищило поріг.
+ */
+internal fun minimizeRelease(
+    dragPx: Float,
+    heightPx: Float,
+    canceled: Boolean,
+): MinimizeRelease =
+    if (!canceled && shouldMinimize(dragPx, heightPx)) {
+        MinimizeRelease.MINIMIZE
+    } else {
+        MinimizeRelease.SETTLE
+    }
+
 /** Мінімальна яскравість вікна, щоб екран не ставав повністю чорним. */
 internal const val MIN_BRIGHTNESS = 0.05f
 

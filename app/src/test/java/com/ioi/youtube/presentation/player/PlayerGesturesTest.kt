@@ -52,6 +52,18 @@ class PlayerGesturesTest {
     }
 
     @Test
+    fun `second pointer settles instead of minimizing`() {
+        assertThat(minimizeRelease(500f, 1000f, canceled = false))
+            .isEqualTo(MinimizeRelease.MINIMIZE)
+        assertThat(minimizeRelease(500f, 1000f, canceled = true))
+            .isEqualTo(MinimizeRelease.SETTLE)
+        assertThat(minimizeRelease(100f, 1000f, canceled = false))
+            .isEqualTo(MinimizeRelease.SETTLE)
+        assertThat(minimizeRelease(500f, 0f, canceled = false))
+            .isEqualTo(MinimizeRelease.SETTLE)
+    }
+
+    @Test
     fun `level percent is rounded`() {
         assertThat(levelPercent(0f)).isEqualTo(0)
         assertThat(levelPercent(0.404f)).isEqualTo(40)

@@ -258,10 +258,9 @@ fun VideoPlayer(
                     }
 
                     if (tracking) {
-                        if (!canceled && shouldMinimize(lastDrag, playerHeight)) {
-                            onMinimizeState.value?.invoke()
-                        } else {
-                            minimizeSettleFrom = lastDrag
+                        when (minimizeRelease(lastDrag, playerHeight, canceled)) {
+                            MinimizeRelease.MINIMIZE -> onMinimizeState.value?.invoke()
+                            MinimizeRelease.SETTLE -> minimizeSettleFrom = lastDrag
                         }
                     }
                 }
