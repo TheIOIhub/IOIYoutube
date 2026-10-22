@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -17,6 +18,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ioi.youtube.presentation.home.HomeRoute
+import com.ioi.youtube.presentation.player.PlaybackViewModel
 import com.ioi.youtube.presentation.player.PlayerRoute
 import com.ioi.youtube.presentation.search.SearchRoute
 import com.ioi.youtube.presentation.shorts.ShortsRoute
@@ -32,6 +34,7 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
 
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
+    val playback: PlaybackViewModel = hiltViewModel()
 
     // Екран вiдео — вільний поворот, решта застосунку — портрет.
     LaunchedEffect(currentRoute, activity) {
@@ -84,9 +87,13 @@ fun IOITubeApp(navController: NavHostController = rememberNavController()) {
             }
             composable(Routes.PLAYER) {
                 PlayerRoute(
+                    playback = playback,
                     onVideoClick = { videoId ->
-                        navController.navigate(Routes.player(videoId))
+                        navController.navigate(Routes.player(videoId)) {
+                            popUpTo(Routes.PLAYER) { inclusive = true }
+                        }
                     },
+                    onBack = { navController.popBackStack() },
                 )
             }
         }

@@ -2,7 +2,7 @@ package com.ioi.youtube.presentation.player
 
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +36,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ioi.youtube.domain.model.AudioTrackOption
 import com.ioi.youtube.domain.model.UiState
 import com.ioi.youtube.domain.model.VideoDetails
 import com.ioi.youtube.domain.model.VideoStream
@@ -53,13 +54,64 @@ import com.ioi.youtube.presentation.util.findActivity
 
 @Composable
 fun PlayerRoute(
+    playback: PlaybackViewModel,
     onVideoClick: (String) -> Unit,
+    onBack: () -> Unit,
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val isFullscreen = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    LaunchedEffect(viewModel.videoId) {
+        playback.begin(viewModel.videoId)
+    }
+
+    val cachedDetails = playback.cachedDetails
+    val cachedStream = playback.cachedStream
+    LaunchedEffect(uiState.video, uiState.stream) {
+        val details = (uiState.video as? UiState.Success)?.data ?: return@LaunchedEffect
+        val stream = (uiState.stream as? UiState.Success)?.data ?: return@LaunchedEffect
+        playback.cache(viewModel.videoId, details, stream)
+    }
+
+    val displayedState = remember(uiState, cachedDetails, cachedStream) {
+        uiState.copy(
+            video = if (uiState.video is UiState.Loading && cachedDetails != null) {
+                UiState.Success(cachedDetails)
+            } else {
+                uiState.video
+            },
+            stream = if (uiState.stream is UiState.Loading && cachedStream != null) {
+                UiState.Success(cachedStream)
+            } else {
+                uiState.stream
+            },
+        )
+    }
+
+    // Вихiд ставить портрет i лишає його: автоматично повертати SENSOR
+    // не можна — на телефонi, який тримають боком, вiн одразу поверне
+    // ландшафт, i користувач знову опиниться в повному екранi.
+    // Вільний поворот повертається при наступному входi на екран вiдео
+    // (LaunchedEffect у IOITubeApp).
+    val toggleFullscreen: () -> Unit = {
+        activity?.requestedOrientation = if (isFullscreen) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+    }
+
+    BackHandler {
+        if (isFullscreen) {
+            toggleFullscreen()
+        } else {
+            playback.stop()
+            onBack()
+        }
+    }
 
     LaunchedEffect(isFullscreen, activity) {
         val current = activity ?: return@LaunchedEffect
@@ -82,22 +134,16 @@ fun PlayerRoute(
     }
 
     PlayerScreen(
-        uiState = uiState,
+        uiState = displayedState,
         onVideoClick = onVideoClick,
         onRetry = viewModel::retry,
         isFullscreen = isFullscreen,
-        onToggleFullscreen = {
-            // Вихiд ставить портрет i лишає його: автоматично повертати SENSOR
-            // не можна — на телефонi, який тримають боком, вiн одразу поверне
-            // ландшафт, i користувач знову опиниться в повному екранi.
-            // Вільний поворот повертається при наступному входi на екран вiдео
-            // (LaunchedEffect у IOITubeApp).
-            activity?.requestedOrientation = if (isFullscreen) {
-                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            } else {
-                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            }
-        },
+        onToggleFullscreen = toggleFullscreen,
+        holder = playback.holder,
+        initialVideo = playback.selectedVideo,
+        initialAudio = playback.selectedAudio,
+        selectionInitialized = playback.selectionInitialized,
+        onSelectionChanged = playback::updateSelection,
     )
 }
 
@@ -109,7 +155,11 @@ fun PlayerScreen(
     modifier: Modifier = Modifier,
     isFullscreen: Boolean = false,
     onToggleFullscreen: (() -> Unit)? = null,
-    holderFactory: (Context) -> PlayerHolder = { PlayerHolder(it) },
+    holder: PlayerHolder? = null,
+    initialVideo: VideoVariant? = null,
+    initialAudio: AudioTrackOption? = null,
+    selectionInitialized: Boolean = false,
+    onSelectionChanged: (VideoVariant?, AudioTrackOption?) -> Unit = { _, _ -> },
 ) {
     when (val videoState = uiState.video) {
         is UiState.Loading -> LoadingBox(modifier)
@@ -123,17 +173,22 @@ fun PlayerScreen(
         is UiState.Success -> {
             val details = videoState.data
             val stream = (uiState.stream as? UiState.Success)?.data
-            val context = LocalContext.current
-
-            // Holder створюється ДО гілки портрет/ландшафт і не залежить від неї.
-            val holder = remember(stream, context) { stream?.let { holderFactory(context) } }
             val videoOptions = remember(stream) { chooseVideoVariants(stream?.videoOnly.orEmpty()) }
             val audioOptions = remember(stream) { chooseAudioTracks(stream?.audioTracks.orEmpty()) }
-            val initialVideo = remember(stream) { defaultVideo(videoOptions) }
-            val initialAudio = remember(stream) { defaultAudio(audioOptions) }
-            var selectedVideo by remember(stream) { mutableStateOf(initialVideo) }
-            var selectedAudio by remember(stream) { mutableStateOf(initialAudio) }
+            val fallbackVideo = remember(videoOptions) { defaultVideo(videoOptions) }
+            val fallbackAudio = remember(audioOptions) { defaultAudio(audioOptions) }
+            val startVideo = if (selectionInitialized) initialVideo else fallbackVideo
+            val startAudio = if (selectionInitialized) initialAudio else fallbackAudio
+            var selectedVideo by remember(stream) { mutableStateOf(startVideo) }
+            var selectedAudio by remember(stream) { mutableStateOf(startAudio) }
             var scale by rememberSaveable(stream?.url) { mutableStateOf(VideoScale.FIT) }
+
+            // Перший показ: запам'ятати default-вибір у сесії, щоб розгортання його не скинуло.
+            LaunchedEffect(stream, selectionInitialized) {
+                if (stream != null && !selectionInitialized) {
+                    onSelectionChanged(selectedVideo, selectedAudio)
+                }
+            }
 
             // У повному екрані відео одразу заповнює краї; у портреті — вписується.
             LaunchedEffect(isFullscreen) {
@@ -150,10 +205,6 @@ fun PlayerScreen(
                 )
             }
 
-            DisposableEffect(holder) {
-                onDispose { holder?.release() }
-            }
-
             val player: @Composable (Modifier) -> Unit = { playerModifier ->
                 VideoPlayer(
                     player = holder?.player,
@@ -165,13 +216,18 @@ fun PlayerScreen(
                     onSelectAuto = {
                         selectedVideo = null
                         selectedAudio = null
+                        onSelectionChanged(null, null)
                     },
-                    onSelectVideo = { selectedVideo = it },
+                    onSelectVideo = {
+                        selectedVideo = it
+                        onSelectionChanged(it, selectedAudio)
+                    },
                     onSelectAudio = { track ->
                         selectedAudio = track
                         // З HLS-режиму вибір мови має одразу перевести на merged:
                         // без video-only плану нема з чим склеювати аудіо.
                         if (selectedVideo == null) selectedVideo = defaultVideo(videoOptions)
+                        onSelectionChanged(selectedVideo, track)
                     },
                     scale = scale,
                     onScaleChange = { scale = it },

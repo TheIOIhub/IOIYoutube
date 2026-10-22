@@ -1,5 +1,6 @@
 package com.ioi.youtube.presentation.player
 
+import android.content.Context
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.ioi.youtube.domain.model.Comment
 import com.ioi.youtube.domain.model.UiState
@@ -22,6 +24,7 @@ import com.ioi.youtube.domain.model.VideoStream
 import com.ioi.youtube.presentation.theme.IOITubeTheme
 import com.ioi.youtube.testutil.TestData
 import kotlin.OptIn
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,6 +37,24 @@ class PlayerScreenTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    private val holders = mutableListOf<PlayerHolder>()
+
+    @After
+    fun tearDown() {
+        holders.forEach { it.release() }
+    }
+
+    private fun holder(): PlayerHolder =
+        PlayerHolder(ApplicationProvider.getApplicationContext<Context>()).also { holders += it }
+
+    private fun successState() = PlayerUiState(
+        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+        stream = UiState.Success(
+            VideoStream("https://example.com/v.mp4", "720p", "MPEG-4"),
+        ),
+        comments = UiState.Success(emptyList()),
+    )
 
     @Test
     fun `video error replaces player with message and retry`() {
@@ -149,6 +170,7 @@ class PlayerScreenTest {
                     ),
                     onVideoClick = {},
                     onRetry = {},
+                    holder = holder(),
                 )
             }
         }
@@ -174,6 +196,7 @@ class PlayerScreenTest {
                     ),
                     onVideoClick = {},
                     onRetry = {},
+                    holder = holder(),
                     isFullscreen = true,
                     onToggleFullscreen = {},
                 )
@@ -202,6 +225,7 @@ class PlayerScreenTest {
                     ),
                     onVideoClick = {},
                     onRetry = {},
+                    holder = holder(),
                     onToggleFullscreen = { toggled = true },
                 )
             }
@@ -227,6 +251,7 @@ class PlayerScreenTest {
                     ),
                     onVideoClick = {},
                     onRetry = {},
+                    holder = holder(),
                 )
             }
         }
@@ -245,40 +270,27 @@ class PlayerScreenTest {
     }
 
     @Test
-    fun `fullscreen toggle keeps the same player holder`() {
-        var fullscreen by mutableStateOf(false)
-        var created = 0
-        val holders = mutableListOf<PlayerHolder>()
+    fun `disposing the screen does not release the shared holder`() {
+        var show by mutableStateOf(true)
+        val sharedHolder = holder()
 
         composeRule.setContent {
             IOITubeTheme {
-                PlayerScreen(
-                    uiState = PlayerUiState(
-                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
-                        stream = UiState.Success(
-                            VideoStream("https://example.com/v.mp4", "720p", "MPEG-4"),
-                        ),
-                        comments = UiState.Success(emptyList()),
-                    ),
-                    onVideoClick = {},
-                    onRetry = {},
-                    isFullscreen = fullscreen,
-                    onToggleFullscreen = {},
-                    holderFactory = { context ->
-                        PlayerHolder(context).also {
-                            created++
-                            holders += it
-                        }
-                    },
-                )
+                if (show) {
+                    PlayerScreen(
+                        uiState = successState(),
+                        onVideoClick = {},
+                        onRetry = {},
+                        holder = sharedHolder,
+                    )
+                }
             }
         }
 
-        composeRule.runOnIdle { fullscreen = true }
+        composeRule.runOnIdle { show = false }
         composeRule.waitForIdle()
 
-        assertThat(created).isEqualTo(1)
-        holders.forEach { it.release() }
+        assertThat(sharedHolder.isReleased).isFalse()
     }
 
     @Test
@@ -297,6 +309,7 @@ class PlayerScreenTest {
                     ),
                     onVideoClick = { clicked = it },
                     onRetry = {},
+                    holder = holder(),
                 )
             }
         }
