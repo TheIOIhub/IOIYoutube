@@ -71,6 +71,8 @@ IOITubeApp
 - `cachedStream: VideoStream?`
 - `selectedVideo: VideoVariant?`
 - `selectedAudio: AudioTrackOption?`
+- `selectionInitialized: Boolean` — чи вже застосовано вибір до цього відео;
+  потрібно, щоб відрізнити «ще не ініціалізовано» від свідомо обраного «Авто».
 
 Похідні значення:
 - `holder: PlayerHolder` — створюється ліниво з application context.
@@ -79,13 +81,14 @@ IOITubeApp
 Методи:
 - `begin(videoId: String)`
   - Якщо `videoId` відрізняється від поточного: `holder.stop()`, очистити кеш і
-    вибір якості/аудіо, запам'ятати новий id.
+    вибір якості/аудіо, `selectionInitialized = false`, запам'ятати новий id.
   - Завжди встановлює `minimized = false`.
   - Для того самого відео не чіпає ні плеєр, ні кеш — це шлях розгортання.
 - `cache(videoId: String, details: VideoDetails, stream: VideoStream)`
   - Оновлює кеш лише якщо `videoId == this.videoId`.
 - `updateSelection(video: VideoVariant?, audio: AudioTrackOption?)`
-  - Зберігає вибір для наступного розгортання.
+  - Зберігає вибір для наступного розгортання і ставить
+    `selectionInitialized = true`.
 - `minimize(): Boolean`
   - Якщо `canMinimize`, ставить `minimized = true` і повертає `true`.
   - Інакше нічого не змінює й повертає `false`.
@@ -93,7 +96,8 @@ IOITubeApp
   - Знімає `minimized`, не чіпаючи плеєр; використовується перед навігацією
     з міні-плеєра, щоб він зник до приєднання PlayerView екрана відео.
 - `stop()`
-  - `holder.stop()`, очищає `videoId`, кеш, вибір і `minimized`.
+  - `holder.stop()`, очищає `videoId`, кеш, вибір, `selectionInitialized` і
+    `minimized`.
 - `onCleared()`
   - Звільняє holder, якщо він був створений.
 
@@ -116,6 +120,8 @@ IOITubeApp
 Сигнатура змінюється:
 - `holder: PlayerHolder` замість `holderFactory`;
 - `initialVideo: VideoVariant?`, `initialAudio: AudioTrackOption?`;
+- `selectionInitialized: Boolean` — якщо false, екран сам обирає default-якість
+  і default-аудіо та повідомляє їх через `onSelectionChanged`;
 - `onSelectionChanged: (VideoVariant?, AudioTrackOption?) -> Unit`;
 - `onMinimize: (() -> Unit)? = null`.
 
