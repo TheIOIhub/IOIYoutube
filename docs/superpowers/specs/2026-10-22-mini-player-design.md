@@ -57,7 +57,7 @@ IOITubeApp
 │   └── PlayerRoute
 │       ├── PlayerViewModel (мережа/кеш: details, stream, comments)
 │       └── PlayerScreen(holder = playback.holder)
-└── MiniPlayer(playback, onExpand, onClose)
+└── MiniPlayer(player, onExpand, onClose)
 ```
 
 ### 5.1 PlaybackViewModel
@@ -89,6 +89,9 @@ IOITubeApp
 - `minimize(): Boolean`
   - Якщо `canMinimize`, ставить `minimized = true` і повертає `true`.
   - Інакше нічого не змінює й повертає `false`.
+- `expand()`
+  - Знімає `minimized`, не чіпаючи плеєр; використовується перед навігацією
+    з міні-плеєра, щоб він зник до приєднання PlayerView екрана відео.
 - `stop()`
   - `holder.stop()`, очищає `videoId`, кеш, вибір і `minimized`.
 - `onCleared()`
@@ -98,6 +101,7 @@ IOITubeApp
 
 Додати:
 - `isReady: Boolean` — джерело встановлено, плеєр не звільнений.
+- `isReleased: Boolean` — для тестів життєвого циклу.
 - `stop()`:
   - `player.stop()`, `player.clearMediaItems()`;
   - скинути `currentPlan`, `loaded`, `stream`, `video`, `audio`, `auto`, `error`;
@@ -168,7 +172,8 @@ IOITubeApp
   - pause/play знизу ліворуч;
   - закриття X зверху праворуч;
   - білі іконки на напівпрозорому чорному фоні.
-- Стан `isPlaying` береться з `Player.Listener`; play/pause викликає
+- Стан кнопки береться з `playWhenReady` (намір відтворювати), а не з
+  `isPlaying` (яке під час буферизації хибне); play/pause викликає
   `player.play()` / `player.pause()`.
 - Content descriptions українською: «Пауза», «Відтворити», «Закрити міні-плеєр»,
   «Розгорнути відео».
@@ -178,15 +183,17 @@ IOITubeApp
 ## 6. Жест згортання
 
 - Працює лише в портреті (`!isFullscreen`) і лише по області відео.
-- Інтегрується в наявний `OnTouchListener` у `VideoPlayer`, який уже обробляє
-  fullscreen-жести.
-- Новий режим `MINIMIZE`:
+- Окремий Compose `pointerInput` на контейнері відео. Він слухає
+  `PointerEventPass.Initial`, тому бачить події раніше за `PlayerView` і його
+  контролер; тапи не споживає, тому кнопки якості/звуку й контролер працюють.
+- Режим `MINIMIZE`:
   - починається, коли палець зсунувся переважно вниз після touch slop;
-  - має приоритет над звичайними тапами, але не над pinch;
-  - під час руху `minimizeDrag` дорівнює вертикальному зсуву;
+  - скасовується, якщо з'явився другий палець (pinch має приоритет);
+  - споживає події лише під час активного протягування;
+  - під час руху зсув картки дорівнює вертикальному зсуву пальця через
+    `Animatable`;
   - вся картка відео (разом із кнопками) зсувається через `graphicsLayer` і має
-    `zIndex(1f)`, щоб бути поверх списку деталей;
-  - контролер PlayerView ховається на старті протягування.
+    `zIndex(1f)`, щоб бути поверх списку деталей.
 - Поріг: `MINIMIZE_DRAG_FRACTION = 0.30f` від висоти відео.
   - відпускання нижче порогу → анімоване повернення за 200 мс;
   - відпускання на порозі або нижче → `onMinimize()`;
