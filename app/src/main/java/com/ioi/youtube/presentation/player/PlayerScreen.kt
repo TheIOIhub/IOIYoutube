@@ -68,8 +68,11 @@ fun PlayerRoute(
         playback.begin(viewModel.videoId)
     }
 
-    val cachedDetails = playback.cachedDetails
-    val cachedStream = playback.cachedStream
+    // Під час переходу вiдео→вiдео композицiя може статися з кешем попереднього
+    // вiдео до `playback.begin(newId)`. Тому кеш валiдний лише для того ж id.
+    val sameVideo = playback.videoId == viewModel.videoId
+    val cachedDetails = playback.cachedDetails.takeIf { sameVideo }
+    val cachedStream = playback.cachedStream.takeIf { sameVideo }
     LaunchedEffect(uiState.video, uiState.stream) {
         val details = (uiState.video as? UiState.Success)?.data ?: return@LaunchedEffect
         val stream = (uiState.stream as? UiState.Success)?.data ?: return@LaunchedEffect
@@ -104,12 +107,20 @@ fun PlayerRoute(
         }
     }
 
+    val minimizeAndBack: () -> Unit = {
+        if (playback.minimize()) {
+            onBack()
+        } else {
+            playback.stop()
+            onBack()
+        }
+    }
+
     BackHandler {
         if (isFullscreen) {
             toggleFullscreen()
         } else {
-            playback.stop()
-            onBack()
+            minimizeAndBack()
         }
     }
 
