@@ -1,14 +1,25 @@
 package com.ioi.youtube.presentation.player
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Context
+import android.media.AudioManager
+import android.provider.Settings
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import android.view.ViewConfiguration
+import android.view.WindowManager
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
@@ -20,10 +31,12 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -43,6 +57,10 @@ import com.ioi.youtube.domain.model.AudioTrackOption
 import com.ioi.youtube.domain.model.VideoStream
 import com.ioi.youtube.domain.model.VideoVariant
 import com.ioi.youtube.domain.model.formatVideoLabel
+import com.ioi.youtube.presentation.util.findActivity
+import kotlinx.coroutines.delay
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Показує готовий плеєр. `ExoPlayer` створює й володіє ним [PlayerHolder];
@@ -89,8 +107,50 @@ fun VideoPlayer(
     var hlsOptions by remember(videoStream) { mutableStateOf(emptyList<QualityOption>()) }
 
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+    val audioManager = remember(context) {
+        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+    val touchSlop = remember(context) { ViewConfiguration.get(context).scaledTouchSlop.toFloat() }
     val onScaleChangeState = rememberUpdatedState(onScaleChange)
-    val multiTouchState = remember { MultiTouchState() }
+    val touchState = remember { PlayerTouchState() }
+    var gestureHint by remember { mutableStateOf<String?>(null) }
+    var gestureActive by remember { mutableStateOf(false) }
+    val entryProgress = remember { Animatable(1f) }
+
+    LaunchedEffect(gestureHint, gestureActive) {
+        if (gestureHint != null && !gestureActive) {
+            delay(700)
+            gestureHint = null
+        }
+    }
+
+    LaunchedEffect(isFullscreen) {
+        if (isFullscreen) {
+            entryProgress.snapTo(0f)
+            entryProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+            )
+        } else {
+            entryProgress.snapTo(1f)
+        }
+    }
+
+    // Після виходу з повного екрана повертаємо яскравість, яка була до нього.
+    DisposableEffect(isFullscreen, activity) {
+        val window = activity?.window
+        val restore = window?.attributes?.screenBrightness
+            ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        onDispose {
+            if (isFullscreen && window != null) {
+                val attrs = window.attributes
+                attrs.screenBrightness = restore
+                window.attributes = attrs
+            }
+        }
+    }
+
     val scaleDetector = remember(context) {
         ScaleGestureDetector(
             context,
@@ -133,7 +193,13 @@ fun VideoPlayer(
         ),
     ) {
         AndroidView(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val zoom = 0.9f + 0.1f * entryProgress.value
+                    scaleX = zoom
+                    scaleY = zoom
+                },
             factory = { context ->
                 PlayerView(context).apply {
                     this.player = exoPlayer
@@ -147,24 +213,137 @@ fun VideoPlayer(
                 view.resizeMode = resizeModeFor(scale)
                 view.setOnTouchListener { _, event ->
                     scaleDetector.onTouchEvent(event)
+                    val pinching = event.pointerCount > 1 || touchState.mode == GestureMode.PINCH
+                    if (event.pointerCount > 1) {
+                        touchState.mode = GestureMode.PINCH
+                        touchState.consuming = true
+                        gestureActive = false
+                    }
                     when (event.actionMasked) {
                         MotionEvent.ACTION_DOWN -> {
-                            multiTouchState.consuming = false
+                            touchState.consuming = false
+                            touchState.mode = GestureMode.NONE
+                            touchState.target = null
+                            touchState.downX = event.x
+                            touchState.downY = event.y
+                            touchState.downTime = event.eventTime
+                            touchState.moved = false
+                            touchState.lastPercent = -1
+                            gestureActive = false
                             false
                         }
 
                         MotionEvent.ACTION_POINTER_DOWN -> {
-                            multiTouchState.consuming = true
+                            touchState.mode = GestureMode.PINCH
+                            touchState.consuming = true
+                            gestureActive = false
                             true
                         }
 
-                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                            val consume = multiTouchState.consuming
-                            multiTouchState.consuming = false
-                            consume
+                        MotionEvent.ACTION_MOVE -> {
+                            if (!isFullscreen) {
+                                touchState.consuming || pinching
+                            } else if (pinching) {
+                                touchState.consuming = true
+                                true
+                            } else {
+                                val dx = event.x - touchState.downX
+                                val dy = event.y - touchState.downY
+                                if (!touchState.moved &&
+                                    (abs(dx) > touchSlop || abs(dy) > touchSlop)
+                                ) {
+                                    touchState.moved = true
+                                }
+                                if (touchState.mode == GestureMode.NONE &&
+                                    touchState.moved &&
+                                    abs(dy) > abs(dx)
+                                ) {
+                                    touchState.mode = GestureMode.VERTICAL
+                                    touchState.target = if (touchState.downX < view.width / 2f) {
+                                        GestureTarget.BRIGHTNESS
+                                    } else {
+                                        GestureTarget.VOLUME
+                                    }
+                                    touchState.startLevel = when (touchState.target) {
+                                        GestureTarget.VOLUME -> currentVolume(audioManager)
+                                        else -> currentBrightness(context, activity)
+                                    }
+                                    touchState.lastPercent = -1
+                                    gestureActive = true
+                                }
+                                val target = touchState.target
+                                if (touchState.mode == GestureMode.VERTICAL && target != null) {
+                                    val level = adjustedLevel(
+                                        touchState.startLevel,
+                                        dy,
+                                        view.height.toFloat(),
+                                    )
+                                    val shownLevel = if (target == GestureTarget.BRIGHTNESS) {
+                                        level.coerceAtLeast(MIN_BRIGHTNESS)
+                                    } else {
+                                        level
+                                    }
+                                    val percent = levelPercent(shownLevel)
+                                    if (percent != touchState.lastPercent) {
+                                        touchState.lastPercent = percent
+                                        when (target) {
+                                            GestureTarget.VOLUME -> applyVolume(audioManager, level)
+                                            GestureTarget.BRIGHTNESS -> applyBrightness(activity, level)
+                                        }
+                                        gestureHint = when (target) {
+                                            GestureTarget.VOLUME -> "Гучність $percent%"
+                                            GestureTarget.BRIGHTNESS -> "Яскравість $percent%"
+                                        }
+                                    }
+                                    gestureActive = true
+                                    touchState.consuming = true
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
                         }
 
-                        else -> multiTouchState.consuming || event.pointerCount > 1
+                        MotionEvent.ACTION_POINTER_UP -> touchState.consuming || pinching
+
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            val wasTap = isFullscreen &&
+                                event.actionMasked == MotionEvent.ACTION_UP &&
+                                touchState.mode == GestureMode.NONE &&
+                                !touchState.moved &&
+                                event.eventTime - touchState.downTime < TAP_TIMEOUT_MS
+                            val consumed = touchState.consuming
+                            touchState.consuming = false
+                            touchState.mode = GestureMode.NONE
+                            touchState.target = null
+                            gestureActive = false
+                            if (wasTap) {
+                                when (tapZone(event.x, view.width.toFloat())) {
+                                    TapZone.LEFT -> {
+                                        seekRelativeTo(exoPlayer, -SEEK_STEP_MS)
+                                        gestureHint = "−5 с"
+                                    }
+
+                                    TapZone.RIGHT -> {
+                                        seekRelativeTo(exoPlayer, SEEK_STEP_MS)
+                                        gestureHint = "+5 с"
+                                    }
+
+                                    TapZone.CENTER -> {
+                                        if (view.isControllerFullyVisible) {
+                                            view.hideController()
+                                        } else {
+                                            view.showController()
+                                        }
+                                    }
+                                }
+                                true
+                            } else {
+                                consumed
+                            }
+                        }
+
+                        else -> false
                     }
                 }
             },
@@ -173,6 +352,16 @@ fun VideoPlayer(
                 view.player = null
             },
         )
+
+        // Затемнення, яке плавно зникає разом із zoom під час входу в повний екран.
+        if (isFullscreen) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = (1f - entryProgress.value) * 0.5f }
+                    .background(Color.Black),
+            )
+        }
 
         if (error != null) {
             Row(
@@ -188,6 +377,21 @@ fun VideoPlayer(
                 TextButton(onClick = onRetry) {
                     Text("Спробувати знову", color = Color.White)
                 }
+            }
+        }
+
+        gestureHint?.let { hint ->
+            Surface(
+                modifier = Modifier.align(Alignment.Center),
+                color = Color.Black.copy(alpha = 0.72f),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text(
+                    text = hint,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                )
             }
         }
 
@@ -319,9 +523,58 @@ fun VideoPlayer(
     }
 }
 
-/** Тримає стан перехоплення мультитачу між перекомпозиціями. */
-private class MultiTouchState {
+private const val TAP_TIMEOUT_MS = 300L
+
+private enum class GestureMode { NONE, VERTICAL, PINCH }
+
+private enum class GestureTarget { VOLUME, BRIGHTNESS }
+
+/** Тримає стан жесту між перекомпозиціями та подіями MotionEvent. */
+private class PlayerTouchState {
     var consuming: Boolean = false
+    var mode: GestureMode = GestureMode.NONE
+    var target: GestureTarget? = null
+    var downX: Float = 0f
+    var downY: Float = 0f
+    var downTime: Long = 0L
+    var moved: Boolean = false
+    var startLevel: Float = 0f
+    var lastPercent: Int = -1
+}
+
+private fun seekRelativeTo(player: ExoPlayer, deltaMs: Long) {
+    player.seekTo(seekTarget(player.currentPosition, deltaMs, player.duration))
+}
+
+private fun currentVolume(audioManager: AudioManager): Float {
+    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+    return audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / max
+}
+
+private fun applyVolume(audioManager: AudioManager, level: Float) {
+    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+    val target = (level.coerceIn(0f, 1f) * max).roundToInt().coerceIn(0, max)
+    if (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) != target) {
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+    }
+}
+
+private fun currentBrightness(context: Context, activity: Activity?): Float {
+    val override = activity?.window?.attributes?.screenBrightness ?: -1f
+    if (override >= 0f) return override.coerceIn(MIN_BRIGHTNESS, 1f)
+    val system = Settings.System.getInt(
+        context.contentResolver,
+        Settings.System.SCREEN_BRIGHTNESS,
+        128,
+    )
+    return (system / 255f).coerceIn(MIN_BRIGHTNESS, 1f)
+}
+
+private fun applyBrightness(activity: Activity?, level: Float) {
+    val window = activity?.window ?: return
+    val attrs = window.attributes
+    attrs.screenBrightness = level.coerceIn(MIN_BRIGHTNESS, 1f)
+    window.attributes = attrs
 }
 
 @Composable

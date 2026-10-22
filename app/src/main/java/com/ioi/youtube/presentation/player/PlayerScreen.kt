@@ -135,6 +135,11 @@ fun PlayerScreen(
             var selectedAudio by remember(stream) { mutableStateOf(initialAudio) }
             var scale by rememberSaveable(stream?.url) { mutableStateOf(VideoScale.FIT) }
 
+            // У повному екрані відео одразу заповнює краї; у портреті — вписується.
+            LaunchedEffect(isFullscreen) {
+                scale = if (isFullscreen) VideoScale.FILL else VideoScale.FIT
+            }
+
             LaunchedEffect(holder, stream, selectedVideo, selectedAudio) {
                 if (holder == null || stream == null) return@LaunchedEffect
                 holder.update(
