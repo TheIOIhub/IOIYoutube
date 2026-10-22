@@ -44,6 +44,14 @@ class PlayerGesturesTest {
     }
 
     @Test
+    fun `minimize requires a drag past thirty percent`() {
+        assertThat(shouldMinimize(299f, 1000f)).isFalse()
+        assertThat(shouldMinimize(300f, 1000f)).isTrue()
+        assertThat(shouldMinimize(500f, 1000f)).isTrue()
+        assertThat(shouldMinimize(500f, 0f)).isFalse()
+    }
+
+    @Test
     fun `level percent is rounded`() {
         assertThat(levelPercent(0f)).isEqualTo(0)
         assertThat(levelPercent(0.404f)).isEqualTo(40)

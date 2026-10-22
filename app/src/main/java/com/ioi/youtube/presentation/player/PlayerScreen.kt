@@ -155,6 +155,7 @@ fun PlayerRoute(
         initialAudio = playback.selectedAudio,
         selectionInitialized = playback.selectionInitialized,
         onSelectionChanged = playback::updateSelection,
+        onMinimize = minimizeAndBack,
     )
 }
 
@@ -171,6 +172,7 @@ fun PlayerScreen(
     initialAudio: AudioTrackOption? = null,
     selectionInitialized: Boolean = false,
     onSelectionChanged: (VideoVariant?, AudioTrackOption?) -> Unit = { _, _ -> },
+    onMinimize: (() -> Unit)? = null,
 ) {
     when (val videoState = uiState.video) {
         is UiState.Loading -> LoadingBox(modifier)
@@ -247,6 +249,7 @@ fun PlayerScreen(
                     modifier = playerModifier,
                     isFullscreen = isFullscreen,
                     onToggleFullscreen = onToggleFullscreen,
+                    onMinimize = onMinimize,
                 )
             }
 

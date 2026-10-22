@@ -12,6 +12,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performGesture
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +23,7 @@ import com.google.common.truth.Truth.assertThat
 import com.ioi.youtube.domain.model.Comment
 import com.ioi.youtube.domain.model.UiState
 import com.ioi.youtube.domain.model.VideoStream
+import com.ioi.youtube.domain.model.VideoVariant
 import com.ioi.youtube.presentation.theme.IOITubeTheme
 import com.ioi.youtube.testutil.TestData
 import kotlin.OptIn
@@ -319,5 +322,85 @@ class PlayerScreenTest {
         composeRule.onNodeWithText("Video aaaaaaaaaaa").performClick()
 
         assertThat(clicked).isEqualTo("aaaaaaaaaaa")
+    }
+
+    @Test
+    fun `swiping the video down asks to minimize`() {
+        var minimized = false
+
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = successState(),
+                    onVideoClick = {},
+                    onRetry = {},
+                    holder = holder(),
+                    onMinimize = { minimized = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("player-container").performTouchInput {
+            swipeDown(startY = height * 0.1f, endY = height * 0.9f, durationMillis = 300)
+        }
+        composeRule.waitForIdle()
+
+        assertThat(minimized).isTrue()
+    }
+
+    @Test
+    fun `short swipe does not minimize`() {
+        var minimized = false
+
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = successState(),
+                    onVideoClick = {},
+                    onRetry = {},
+                    holder = holder(),
+                    onMinimize = { minimized = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("player-container").performTouchInput {
+            swipeDown(startY = height * 0.1f, endY = height * 0.25f, durationMillis = 300)
+        }
+        composeRule.waitForIdle()
+
+        assertThat(minimized).isFalse()
+    }
+
+    @Test
+    fun `minimize gesture does not block player controls`() {
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = PlayerUiState(
+                        video = UiState.Success(TestData.details("dQw4w9WgXcQ")),
+                        stream = UiState.Success(
+                            VideoStream(
+                                url = "https://example.com/v.mp4",
+                                resolution = "720p",
+                                format = "MPEG-4",
+                                hlsUrl = "https://example.com/hls.m3u8",
+                                videoOnly = listOf(
+                                    VideoVariant("https://example.com/v720.mp4", 720, 1_000_000),
+                                ),
+                            ),
+                        ),
+                        comments = UiState.Success(emptyList()),
+                    ),
+                    onVideoClick = {},
+                    onRetry = {},
+                    holder = holder(),
+                    onMinimize = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Якість").performClick()
+        composeRule.onNodeWithText("Авто (HLS)").assertExists()
     }
 }

@@ -11,8 +11,11 @@ import android.view.ViewConfiguration
 import android.view.WindowManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -38,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -46,9 +50,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
@@ -83,6 +90,7 @@ fun VideoPlayer(
     modifier: Modifier = Modifier,
     isFullscreen: Boolean = false,
     onToggleFullscreen: (() -> Unit)? = null,
+    onMinimize: (() -> Unit)? = null,
     error: String? = null,
     onRetry: () -> Unit = {},
     unavailableText: String = "Відео недоступне",
@@ -117,6 +125,10 @@ fun VideoPlayer(
     var gestureHint by remember { mutableStateOf<String?>(null) }
     var gestureActive by remember { mutableStateOf(false) }
     val entryProgress = remember { Animatable(1f) }
+    var minimizeOffset by remember { mutableFloatStateOf(0f) }
+    var minimizeSettleFrom by remember { mutableFloatStateOf(NO_SETTLE) }
+    val onMinimizeState = rememberUpdatedState(onMinimize)
+    val canMinimize = onMinimize != null
 
     LaunchedEffect(gestureHint, gestureActive) {
         if (gestureHint != null && !gestureActive) {
@@ -126,6 +138,8 @@ fun VideoPlayer(
     }
 
     LaunchedEffect(isFullscreen) {
+        minimizeOffset = 0f
+        minimizeSettleFrom = NO_SETTLE
         if (isFullscreen) {
             entryProgress.snapTo(0f)
             entryProgress.animateTo(
@@ -135,6 +149,16 @@ fun VideoPlayer(
         } else {
             entryProgress.snapTo(1f)
         }
+    }
+
+    // Зсув під час перетягування пишеться напряму з-під жесту (там не можна
+    // викликати suspend-функції), а плавне повернення дограє цей ефект.
+    LaunchedEffect(minimizeSettleFrom) {
+        val from = minimizeSettleFrom
+        if (from == NO_SETTLE) return@LaunchedEffect
+        animate(from, 0f, animationSpec = tween(200)) { value, _ -> minimizeOffset = value }
+        minimizeOffset = 0f
+        minimizeSettleFrom = NO_SETTLE
     }
 
     // Після виходу з повного екрана повертаємо яскравість, яка була до нього.
@@ -188,9 +212,60 @@ fun VideoPlayer(
     }
 
     Box(
-        modifier = modifier.then(
-            if (isFullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f),
-        ),
+        modifier = modifier
+            .then(
+                if (isFullscreen) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                },
+            )
+            .zIndex(if (minimizeOffset > 0f) 1f else 0f)
+            .graphicsLayer { translationY = minimizeOffset }
+            .pointerInput(isFullscreen, canMinimize) {
+                if (isFullscreen || !canMinimize) return@pointerInput
+                val playerHeight = size.height.toFloat()
+                val touchSlop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial,
+                    )
+                    var tracking = false
+                    var lastDrag = 0f
+                    var canceled = false
+
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.changes.count { it.pressed } > 1) {
+                            canceled = true
+                            break
+                        }
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val dx = change.position.x - down.position.x
+                        val dy = change.position.y - down.position.y
+
+                        if (!tracking && dy > touchSlop && dy > abs(dx)) {
+                            tracking = true
+                        }
+                        if (tracking) {
+                            lastDrag = dy.coerceAtLeast(0f)
+                            minimizeOffset = lastDrag
+                            minimizeSettleFrom = NO_SETTLE
+                            change.consume()
+                        }
+                        if (!change.pressed) break
+                    }
+
+                    if (tracking) {
+                        if (!canceled && shouldMinimize(lastDrag, playerHeight)) {
+                            onMinimizeState.value?.invoke()
+                        } else {
+                            minimizeSettleFrom = lastDrag
+                        }
+                    }
+                }
+            },
     ) {
         AndroidView(
             modifier = Modifier
@@ -524,6 +599,9 @@ fun VideoPlayer(
 }
 
 private const val TAP_TIMEOUT_MS = 300L
+
+/** Позначка «повернення вгору не запущене» для анімації зсуву згортання. */
+private const val NO_SETTLE = -1f
 
 private enum class GestureMode { NONE, VERTICAL, PINCH }
 

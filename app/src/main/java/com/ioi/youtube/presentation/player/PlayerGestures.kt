@@ -8,6 +8,12 @@ internal const val TAP_EDGE_FRACTION = 0.35f
 /** Крок перемотки тапом. */
 internal const val SEEK_STEP_MS = 5_000L
 
+/** Частка висоти відео, після якої відпускання згортає плеєр. */
+internal const val MINIMIZE_DRAG_FRACTION = 0.30f
+
+internal fun shouldMinimize(dragPx: Float, heightPx: Float): Boolean =
+    heightPx > 0f && dragPx >= heightPx * MINIMIZE_DRAG_FRACTION
+
 /** Мінімальна яскравість вікна, щоб екран не ставав повністю чорним. */
 internal const val MIN_BRIGHTNESS = 0.05f
 
