@@ -49,6 +49,12 @@ class PlayerHolder(
     var error: String? by mutableStateOf(null)
         private set
 
+    internal val isReady: Boolean
+        get() = loaded && !released
+
+    internal val isReleased: Boolean
+        get() = released
+
     init {
         player.addListener(errorListener)
     }
@@ -87,6 +93,23 @@ class PlayerHolder(
         currentPlan = null
         loaded = false
         player.release()
+    }
+
+    /**
+     * Зупиняє поточне джерело, але лишає ExoPlayer живим для міні-плеєра.
+     * Наступний [update] з тим самим планом має завантажити його заново з нуля.
+     */
+    fun stop() {
+        if (released) return
+        player.stop()
+        player.clearMediaItems()
+        currentPlan = null
+        loaded = false
+        stream = null
+        video = null
+        audio = null
+        auto = false
+        error = null
     }
 
     private fun apply(plan: PlaybackPlan, positionMs: Long) {

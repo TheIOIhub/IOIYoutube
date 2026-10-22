@@ -72,10 +72,28 @@ class PlayerHolderTest {
     }
 
     @Test
+    fun `stop clears readiness and allows reloading the same plan`() {
+        val video = VideoVariant("https://v/1080.mp4", 1080, 2_000_000)
+        val source = stream(video)
+
+        holder.update(source, video, audio, auto = false)
+        assertThat(holder.isReady).isTrue()
+
+        holder.stop()
+
+        assertThat(holder.isReady).isFalse()
+        assertThat(holder.isReleased).isFalse()
+
+        holder.update(source, video, audio, auto = false)
+        assertThat(holder.isReady).isTrue()
+    }
+
+    @Test
     fun `release is idempotent`() {
         holder.release()
         holder.release()
 
         assertThat(holder.error).isNull()
+        assertThat(holder.isReleased).isTrue()
     }
 }
