@@ -18,8 +18,9 @@ internal fun shouldMinimize(dragPx: Float, heightPx: Float): Boolean =
 internal enum class MinimizeRelease { MINIMIZE, SETTLE }
 
 /**
- * Багатопальцевий жест (наприклад, початок пінчу) завжди повертає відео на місце,
- * навіть якщо протягування вже перевищило поріг.
+ * Багатопальцевий жест (наприклад, початок пінчу) або системний
+ * `ACTION_CANCEL` завжди повертає відео на місце, навіть якщо протягування
+ * вже перевищило поріг.
  */
 internal fun minimizeRelease(
     dragPx: Float,

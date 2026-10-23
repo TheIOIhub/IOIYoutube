@@ -406,6 +406,34 @@ class PlayerScreenTest {
     }
 
     @Test
+    fun `system cancel settles the minimize gesture instead of minimizing`() {
+        var minimized = false
+
+        composeRule.setContent {
+            IOITubeTheme {
+                PlayerScreen(
+                    uiState = successState(),
+                    onVideoClick = {},
+                    onRetry = {},
+                    holder = holder(),
+                    onMinimize = { minimized = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("player-container").performTouchInput {
+            val x = centerX
+            down(0, Offset(x, height * 0.1f))
+            moveTo(0, Offset(x, height * 0.6f))
+            // Системний ACTION_CANCEL: жестова навігація або перехоплення батьком.
+            cancel()
+        }
+        composeRule.waitForIdle()
+
+        assertThat(minimized).isFalse()
+    }
+
+    @Test
     fun `minimize gesture does not block player controls`() {
         composeRule.setContent {
             IOITubeTheme {

@@ -244,6 +244,15 @@ fun VideoPlayer(
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         val dx = change.position.x - down.position.x
                         val dy = change.position.y - down.position.y
+                        val released = !change.pressed
+
+                        // Compose 1.7 не передає системний ACTION_CANCEL окремо:
+                        // він синтезує звичайний up, але з isConsumed = true
+                        // (бо палець ще натиснутий). Справжній up на
+                        // Initial-проході ще ніхто не спожив.
+                        if (released && change.isConsumed) {
+                            canceled = true
+                        }
 
                         if (!tracking && dy > touchSlop && dy > abs(dx)) {
                             tracking = true
@@ -254,7 +263,7 @@ fun VideoPlayer(
                             minimizeSettleFrom = NO_SETTLE
                             change.consume()
                         }
-                        if (!change.pressed) break
+                        if (released) break
                     }
 
                     if (tracking) {
