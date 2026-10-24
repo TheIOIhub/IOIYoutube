@@ -15,3 +15,7 @@ keystore.properties
 
 # Local scaffolding helper (not part of the project)
 .agent-env.sh
+
+# Docs stay local only; not published to GitHub
+docs/
+
